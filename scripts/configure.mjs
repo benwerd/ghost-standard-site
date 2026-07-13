@@ -7,26 +7,12 @@
 // .dev.vars too. Runs automatically before `npm run dev` and `npm run deploy`.
 
 import fs from 'node:fs';
+import { readDevVars, DEV_VARS } from './dev-vars.mjs';
 
-const DEV_VARS = '.dev.vars';
 const TEMPLATE = 'wrangler.example.jsonc';
 const OUTPUT = 'wrangler.jsonc';
 
-if (!fs.existsSync(DEV_VARS)) {
-  console.error(`${DEV_VARS} not found. Run: cp .dev.vars.example ${DEV_VARS} and fill it in.`);
-  process.exit(1);
-}
-
-const vars = Object.fromEntries(
-  fs.readFileSync(DEV_VARS, 'utf8')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('#'))
-    .map((line) => {
-      const eq = line.indexOf('=');
-      return [line.slice(0, eq).trim(), line.slice(eq + 1).trim()];
-    })
-);
+const vars = readDevVars();
 
 if (!vars.GHOST_URL) {
   console.error(`GHOST_URL missing from ${DEV_VARS}.`);

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "configure": "node scripts/configure.mjs",
+    "push-secrets": "node scripts/secrets-json.mjs | wrangler secret bulk",
     "predev": "node scripts/configure.mjs",
     "dev": "wrangler dev",
     "predeploy": "node scripts/configure.mjs",

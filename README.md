@@ -44,8 +44,9 @@ hand.
 | `PUBLICATION_NAME` | config, optional | Overrides the publication name pulled from Ghost settings |
 | `KV_NAMESPACE_ID` | deploy-time only | Consumed by `scripts/configure.mjs`, never seen by the Worker |
 
-In production set the runtime values (everything except `KV_NAMESPACE_ID`)
-with `npx wrangler secret put <NAME>` so nothing lands in tracked files.
+`.dev.vars` (gitignored) is the single source of truth: fill it in once and
+the same values drive local dev, `wrangler.jsonc` generation
+(`npm run configure`), and production secrets (`npm run push-secrets`).
 
 ## Setup
 
@@ -56,13 +57,15 @@ with `npx wrangler secret put <NAME>` so nothing lands in tracked files.
 3. `npx wrangler kv namespace create STATE` → put the id in `.dev.vars` as
    `KV_NAMESPACE_ID` (then `npm run configure`, or let dev/deploy do it).
 4. `npx wrangler queues create ghost-standard-site-events`
-5. Set all runtime secrets and config values:
+5. Push the runtime values from `.dev.vars` to the Worker:
    ```bash
-   for n in GHOST_WEBHOOK_SECRET ATPROTO_APP_PASSWORD GHOST_CONTENT_API_KEY \
-            ATPROTO_HANDLE ATPROTO_DID ATPROTO_PDS_URL GHOST_URL; do
-     npx wrangler secret put $n
-   done
+   npm run push-secrets
    ```
+   This reads the same `.dev.vars` you filled in at step 2 and uploads
+   everything the Worker needs (except `KV_NAMESPACE_ID`, which only
+   `configure` uses) as secrets in one call. It refuses to run while any
+   value still looks like a placeholder. Re-run it whenever `.dev.vars`
+   changes.
 6. `npm run deploy` (regenerates `wrangler.jsonc`, then `wrangler deploy`)
 7. Create the publication record:
    ```bash
