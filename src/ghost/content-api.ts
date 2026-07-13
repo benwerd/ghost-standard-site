@@ -13,7 +13,9 @@ export async function fetchAllPosts(env: Env): Promise<GhostPost[]> {
     url.searchParams.set('include', 'tags');
     url.searchParams.set('limit', String(PAGE_SIZE));
     url.searchParams.set('page', String(page));
-    const res = await fetch(url.toString(), { headers: { 'accept-version': 'v5.0' } });
+    // no accept-version pin: Ghost serves the current version when omitted;
+    // a pinned older major gets 406 UPDATE_CLIENT (seen on Ghost 6)
+    const res = await fetch(url.toString());
     if (!res.ok) throw new Error(`Ghost Content API error ${res.status}: ${await res.text()}`);
     const data = (await res.json()) as {
       posts: GhostPost[];
@@ -31,7 +33,7 @@ export async function fetchAllPosts(env: Env): Promise<GhostPost[]> {
 export async function fetchSettings(env: Env): Promise<GhostSettings> {
   const url = new URL('/ghost/api/content/settings/', env.GHOST_URL);
   url.searchParams.set('key', env.GHOST_CONTENT_API_KEY);
-  const res = await fetch(url.toString(), { headers: { 'accept-version': 'v5.0' } });
+  const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`Ghost Content API error ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as { settings: GhostSettings };
   return data.settings;

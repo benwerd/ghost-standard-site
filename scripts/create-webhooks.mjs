@@ -37,7 +37,8 @@ for (const event of events) {
     headers: {
       authorization: `Ghost ${token}`,
       'content-type': 'application/json',
-      'accept-version': 'v5.0',
+      // no accept-version header: Ghost serves the current version, and
+      // pinning one gets 406 UPDATE_CLIENT once Ghost moves a major ahead
     },
     body: JSON.stringify({
       webhooks: [{ event, target_url: targetUrl, name: `standard.site ${event}`, secret: webhookSecret }],

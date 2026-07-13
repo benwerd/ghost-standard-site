@@ -48,7 +48,7 @@ if (!slug) {
   api.searchParams.set('limit', '1');
   api.searchParams.set('order', 'published_at desc');
 }
-const apiRes = await fetch(api, { headers: { 'accept-version': 'v5.0' } });
+const apiRes = await fetch(api);
 if (!apiRes.ok) {
   console.error(`Ghost Content API error ${apiRes.status}: ${await apiRes.text()}`);
   process.exit(1);
