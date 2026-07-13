@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "configure": "node scripts/configure.mjs",
+    "predev": "node scripts/configure.mjs",
     "dev": "wrangler dev",
+    "predeploy": "node scripts/configure.mjs",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

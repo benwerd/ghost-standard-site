@@ -14,3 +14,8 @@ GHOST_URL=https://yourblog.example.com
 
 # Optional: override the publication name pulled from Ghost settings
 # PUBLICATION_NAME=
+
+# Deployment config, consumed by scripts/configure.mjs (not by the Worker).
+# The route/zone domain is derived from GHOST_URL automatically.
+# From: npx wrangler kv namespace create STATE
+KV_NAMESPACE_ID=

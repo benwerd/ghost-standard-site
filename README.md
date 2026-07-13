@@ -21,11 +21,14 @@ Cloudflare Worker routed in front of your domain:
 your blog; full post bodies are never syndicated.
 
 **Configuration policy:** no identities, domains, or auth material are
-committed to this repo — tracked files contain placeholders only. Runtime
-values are supplied via `.dev.vars` (gitignored) locally and
-`wrangler secret put` in production; deployment config (your domain's route,
-KV namespace id) lives in `wrangler.jsonc`, which is gitignored and copied
-from the tracked `wrangler.example.jsonc` template.
+committed to this repo. Everything lives in `.dev.vars` (gitignored) locally
+and `wrangler secret put` in production. `wrangler.jsonc` is gitignored and
+**generated** — `scripts/configure.mjs` renders it from
+`wrangler.example.jsonc`, deriving the route pattern and zone name from
+`GHOST_URL` (the Worker necessarily fronts the same domain the blog lives
+on) and taking the KV namespace id from `.dev.vars`. It runs automatically
+before `npm run dev` and `npm run deploy`; you never edit wrangler.jsonc by
+hand.
 
 ## Configuration reference
 
@@ -39,27 +42,28 @@ from the tracked `wrangler.example.jsonc` template.
 | `ATPROTO_PDS_URL` | config | Your PDS endpoint (find it in your DID document, e.g. via plc.directory) |
 | `GHOST_URL` | config | Canonical base URL of the blog, no trailing slash |
 | `PUBLICATION_NAME` | config, optional | Overrides the publication name pulled from Ghost settings |
+| `KV_NAMESPACE_ID` | deploy-time only | Consumed by `scripts/configure.mjs`, never seen by the Worker |
 
-In production set **all of these** (config values included) with
-`npx wrangler secret put <NAME>` so nothing lands in tracked files.
+In production set the runtime values (everything except `KV_NAMESPACE_ID`)
+with `npx wrangler secret put <NAME>` so nothing lands in tracked files.
 
 ## Setup
 
 1. `npm install`
-2. `cp wrangler.example.jsonc wrangler.jsonc` (gitignored), then set the
-   route `pattern`/`zone_name` to your domain (it must be a Cloudflare zone
-   on your account, orange-clouded).
-3. `npx wrangler kv namespace create STATE` → paste the id into your
-   `wrangler.jsonc` (replacing `REPLACE_WITH_KV_NAMESPACE_ID`)
+2. `cp .dev.vars.example .dev.vars` and fill everything in. Your blog's
+   domain (from `GHOST_URL`) must be a Cloudflare zone on your account,
+   orange-clouded.
+3. `npx wrangler kv namespace create STATE` → put the id in `.dev.vars` as
+   `KV_NAMESPACE_ID` (then `npm run configure`, or let dev/deploy do it).
 4. `npx wrangler queues create ghost-standard-site-events`
-5. Set all secrets and config values:
+5. Set all runtime secrets and config values:
    ```bash
    for n in GHOST_WEBHOOK_SECRET ATPROTO_APP_PASSWORD GHOST_CONTENT_API_KEY \
             ATPROTO_HANDLE ATPROTO_DID ATPROTO_PDS_URL GHOST_URL; do
      npx wrangler secret put $n
    done
    ```
-6. `npx wrangler deploy`
+6. `npm run deploy` (regenerates `wrangler.jsonc`, then `wrangler deploy`)
 7. Create the publication record:
    ```bash
    curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
@@ -84,9 +88,8 @@ In production set **all of these** (config values included) with
 ## Local development
 
 ```bash
-cp wrangler.example.jsonc wrangler.jsonc   # gitignored; placeholders fine for dev
-cp .dev.vars.example .dev.vars             # fill in real values (gitignored)
-npm run dev                                # proxies localhost:8787 → GHOST_URL
+cp .dev.vars.example .dev.vars   # fill in real values (gitignored)
+npm run dev                       # generates wrangler.jsonc, proxies localhost:8787 → GHOST_URL
 npm test                          # vitest in workerd via @cloudflare/vitest-pool-workers
 npm run typecheck
 ```

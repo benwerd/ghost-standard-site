@@ -1,5 +1,5 @@
-// Template — copy to wrangler.jsonc (gitignored) and fill in your domain and
-// KV namespace id. The real wrangler.jsonc never gets committed.
+// Template — scripts/configure.mjs renders this to wrangler.jsonc (gitignored),
+// filling {{DOMAIN}} from GHOST_URL and {{KV_NAMESPACE_ID}} from .dev.vars.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ghost-standard-site",
@@ -7,10 +7,9 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
-  // Set to your blog's domain (must be a zone on your Cloudflare account).
-  "routes": [{ "pattern": "REPLACE_WITH_YOUR_DOMAIN/*", "zone_name": "REPLACE_WITH_YOUR_DOMAIN" }],
+  "routes": [{ "pattern": "{{DOMAIN}}/*", "zone_name": "{{DOMAIN}}" }],
   "kv_namespaces": [
-    { "binding": "STATE", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+    { "binding": "STATE", "id": "{{KV_NAMESPACE_ID}}" }
   ],
   "queues": {
     "producers": [{ "queue": "ghost-standard-site-events", "binding": "EVENTS" }],
