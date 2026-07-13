@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ghost-standard-site",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "werd.io/*", "zone_name": "werd.io" }],
+  "kv_namespaces": [
+    { "binding": "STATE", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+  ],
+  "queues": {
+    "producers": [{ "queue": "ghost-standard-site-events", "binding": "EVENTS" }],
+    "consumers": [
+      {
+        "queue": "ghost-standard-site-events",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5
+      }
+    ]
+  },
+  "triggers": { "crons": ["17 6 * * *"] },
+  "vars": {
+    "ATPROTO_HANDLE": "werd.io",
+    "ATPROTO_DID": "did:plc:77tdak46psveqneyegsdyc7l",
+    "ATPROTO_PDS_URL": "https://inkcap.us-east.host.bsky.network",
+    "GHOST_URL": "https://werd.io"
+  }
+}

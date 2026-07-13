@@ -1,0 +1,25 @@
+{
+  "event": "post.published",
+  "post": {
+    "current": {
+      "id": "6543a1b2c3d4e5f6a7b8c9d0",
+      "uuid": "0e0c5f95-c1a5-4f75-9c02-2d0d2f4f3a11",
+      "title": "Hello Atmosphere",
+      "slug": "hello-atmosphere",
+      "url": "https://werd.io/hello-atmosphere/",
+      "status": "published",
+      "visibility": "public",
+      "email_only": false,
+      "custom_excerpt": "A test post about syndicating to the Atmosphere.",
+      "excerpt": "A test post about syndicating to the Atmosphere.",
+      "feature_image": "https://werd.io/content/images/2026/07/cover.jpg",
+      "published_at": "2026-07-13T10:00:00.000Z",
+      "updated_at": "2026-07-13T10:00:00.000Z",
+      "tags": [
+        { "id": "t1", "name": "atproto", "slug": "atproto", "visibility": "public" },
+        { "id": "t2", "name": "#internal", "slug": "hash-internal", "visibility": "internal" }
+      ]
+    },
+    "previous": {}
+  }
+}
