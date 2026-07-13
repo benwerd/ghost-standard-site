@@ -186,6 +186,10 @@ from the same custom integration page as `GHOST_CONTENT_API_KEY`.
 
 ## Setup
 
+Cautious first run? See **Trying it with a single post first** below — you
+can prove the whole pipeline on one post before creating webhooks or letting
+the backfill cron loose.
+
 1. `npm install`
 2. `cp .dev.vars.example .dev.vars` and fill everything in — the
    [configuration section above](#configuration-where-every-value-comes-from)
@@ -225,6 +229,80 @@ from the same custom integration page as `GHOST_CONTENT_API_KEY`.
    ```bash
    curl -X POST https://yourdomain.com/_atproto/reconcile -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
+
+## Trying it with a single post first
+
+You don't need Ghost webhooks, the cron, or a backfill to prove the pipeline
+works. [scripts/send-test-webhook.mjs](scripts/send-test-webhook.mjs) fetches
+**one real post** from your Content API, wraps it in the exact envelope Ghost
+sends, signs it with your webhook secret, and POSTs it to the Worker — so a
+single record flows through the entire real path (signature check → queue →
+PDS write → KV → link tags), and it's fully reversible.
+
+> **Why the cron matters here:** a normal deploy registers the daily
+> reconcile cron, and once the publication record exists that cron will
+> start backfilling your **entire archive** (200 posts/day). Deploy with
+> `NO_CRON=1` until you've opted into that.
+
+### Stage 1: entirely local (nothing deployed)
+
+```bash
+# .dev.vars filled in with real values (see Configuration above)
+npm run dev                                   # Worker + local queue on :8787
+
+# in another terminal:
+SECRET=$(grep '^GHOST_WEBHOOK_SECRET=' .dev.vars | cut -d= -f2-)
+curl -X POST http://localhost:8787/_atproto/setup -H "Authorization: Bearer $SECRET"
+node scripts/send-test-webhook.mjs            # syndicate your most recent post
+```
+
+Notes on what's real vs. local here: KV and the queue are local simulations,
+but the **PDS writes are real** — setup creates your actual publication
+record and the webhook creates one actual document record (that's the point;
+document records must reference a real publication). Verify:
+
+```bash
+# the record exists in your repo (rkey appears in the wrangler dev output):
+curl "$ATPROTO_PDS_URL/xrpc/com.atproto.repo.getRecord?repo=$ATPROTO_DID&collection=site.standard.document&rkey=<rkey>"
+# link tags are injected on the proxied page:
+curl -s http://localhost:8787/<slug>/ | grep site.standard
+# idempotency — run it again, the dev log shows "skipped":
+node scripts/send-test-webhook.mjs
+```
+
+Undo at any time: `node scripts/send-test-webhook.mjs --delete` (removes the
+document record and KV entries; the publication record can stay — it's inert
+on its own).
+
+### Stage 2: production, still just one post
+
+This is the only way to test the Bluesky card, since Bluesky's crawler has
+to fetch your real pages. Do setup steps 1–6 but deploy with the cron off:
+
+```bash
+NO_CRON=1 npm run deploy
+```
+
+Then create the publication and push the same single post through the
+deployed Worker:
+
+```bash
+curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $SECRET"
+curl https://yourdomain.com/.well-known/site.standard.publication
+node scripts/send-test-webhook.mjs --url https://yourdomain.com/_atproto/ghost-webhook
+npx wrangler tail   # watch the queue consumer log the write
+```
+
+Give KV up to a minute, then check `curl -s https://yourdomain.com/<slug>/ |
+grep site.standard`, and post the URL on Bluesky — the enhanced article card
+is the definitive pass. Undo with `--delete --url …` as above.
+
+### When you're confident
+
+1. `npm run deploy` (re-enables the cron)
+2. Setup step 8 (`scripts/create-webhooks.mjs`) so real publishes flow
+3. Setup step 9 (repeated `/_atproto/reconcile`) to backfill the archive —
+   or just let the daily cron chip away at it at 200 posts/day
 
 ## Local development
 

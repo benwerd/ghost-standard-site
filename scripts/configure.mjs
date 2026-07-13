@@ -36,7 +36,7 @@ if (!kvId) {
   );
 }
 
-const rendered = fs
+let rendered = fs
   .readFileSync(TEMPLATE, 'utf8')
   .replaceAll('{{DOMAIN}}', domain)
   .replaceAll('{{KV_NAMESPACE_ID}}', kvId || '{{KV_NAMESPACE_ID}}')
@@ -45,5 +45,14 @@ const rendered = fs
     `// GENERATED from ${TEMPLATE} by scripts/configure.mjs — do not edit directly.\n`
   );
 
+// NO_CRON=1 deploys without the daily reconcile cron — for testing a single
+// post before opting into the archive backfill the cron would kick off.
+if (process.env.NO_CRON) {
+  rendered = rendered.replace(/"crons":\s*\[[^\]]*\]/, '"crons": []');
+}
+
 fs.writeFileSync(OUTPUT, rendered);
-console.log(`${OUTPUT} generated: domain=${domain} kv=${kvId || '(placeholder)'}`);
+console.log(
+  `${OUTPUT} generated: domain=${domain} kv=${kvId || '(placeholder)'}` +
+    (process.env.NO_CRON ? ' cron=DISABLED' : '')
+);
