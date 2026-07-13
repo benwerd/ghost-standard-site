@@ -24,7 +24,9 @@ export default {
     if (pathname === '/_atproto/reconcile' && request.method === 'POST') {
       if (!isAuthorizedAdmin(request, env)) return new Response('unauthorized', { status: 401 });
       try {
-        const report = await reconcile(env);
+        // default: windowed repair; ?full=1: archive backfill / deep repair
+        const full = new URL(request.url).searchParams.get('full') === '1';
+        const report = await reconcile(env, { full });
         return Response.json(report);
       } catch (err) {
         return new Response(`reconcile failed: ${(err as Error).message}`, { status: 500 });
