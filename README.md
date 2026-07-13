@@ -228,12 +228,22 @@ the backfill cron loose.
    GHOST_ADMIN_API_KEY=... GHOST_WEBHOOK_SECRET=... \
      node scripts/create-webhooks.mjs https://your-site.ghost.io https://yourdomain.com/_atproto/ghost-webhook
    ```
-9. Backfill the archive — repeat until the response shows `"capped": false`
-   (each run writes at most 200 records, ~200ms apart, to be polite to the
-   PDS):
+9. Backfill the archive — one command, runs in the background:
    ```bash
-   curl -X POST https://yourdomain.com/_atproto/reconcile -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   curl -X POST "https://yourdomain.com/_atproto/reconcile?full=1&max=1000" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
+   This returns `202 queued` immediately. The backfill runs in the queue
+   consumer (a multi-minute job can't live inside an HTTP request), writing
+   up to `max` records per batch ~200ms apart and automatically chaining the
+   next batch until the whole archive is done. Watch progress with
+   `npx wrangler tail`, or poll the latest batch report:
+   ```bash
+   curl "https://yourdomain.com/_atproto/reconcile" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   ```
+   The backfill is finished when that report shows `"capped": false`.
+   A plain `POST` without `?full=1` runs the windowed repair (same as the
+   daily cron: posts updated in the last 3 days, plus orphan cleanup)
+   synchronously and returns its report directly.
 
 ## Trying it with a single post first
 
@@ -320,8 +330,9 @@ iterating; it regenerates the same record. Undo with
 
 1. `npm run deploy` (re-enables the cron)
 2. Setup step 8 (`scripts/create-webhooks.mjs`) so real publishes flow
-3. Setup step 9 (repeated `/_atproto/reconcile`) to backfill the archive —
-   or just let the daily cron chip away at it at 200 posts/day
+3. Setup step 9 (repeated `/_atproto/reconcile?full=1`) to backfill the
+   archive — the daily cron only repairs the recent window, so the backfill
+   is an explicit step, not something the cron does behind your back
 
 ## Local development
 
@@ -354,6 +365,14 @@ npm run typecheck
 - **Everything fails open.** KV miss → no tags, page untouched; PDS down →
   queue retries (5×, then the daily cron repairs); any error in injection
   lookup → origin response passes through. The blog never degrades.
+- **Reconcile has two modes, both O(cheap) at any archive size.** The daily
+  cron runs the *windowed* mode: hash-checked upserts for posts updated in
+  the last 3 days (catches missed publish/edit webhooks) plus orphan
+  deletion against an ids-only enumeration of all public posts (deletions
+  can't be windowed — deleted posts just vanish from the Content API). The
+  *full* mode (`?full=1`) is the explicit backfill: it creates records for
+  posts KV has never seen, skipping known ids without any per-post reads.
+  Neither mode downloads post HTML — reconcile fetches a lean field set.
 - Record writes use `validate: false` because the PDS doesn't host the
   site.standard lexicons; server-side validation would reject them otherwise.
 - KV is eventually consistent (~60s): a link tag may appear up to a minute

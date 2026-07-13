@@ -7,6 +7,10 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  // Full-mode reconcile (archive backfill) makes ~8 subrequests per created
+  // record plus ~100 Content API pages; the account default cap can be as
+  // low as 1,000, which a 200-write backfill run exceeds.
+  "limits": { "subrequests": 10000 },
   "routes": [{ "pattern": "{{DOMAIN}}/*", "zone_name": "{{DOMAIN}}" }],
   "kv_namespaces": [
     { "binding": "STATE", "id": "{{KV_NAMESPACE_ID}}" }
