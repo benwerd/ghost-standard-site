@@ -47,6 +47,21 @@ export async function listPostIds(kv: KVNamespace): Promise<string[]> {
   return ids;
 }
 
+const RECONCILE_REPORT_KEY = 'reconcile:last';
+
+export interface StoredReconcileReport {
+  at: string;
+  report: unknown;
+}
+
+export async function setLastReconcileReport(kv: KVNamespace, report: unknown): Promise<void> {
+  await kv.put(RECONCILE_REPORT_KEY, JSON.stringify({ at: new Date().toISOString(), report }));
+}
+
+export async function getLastReconcileReport(kv: KVNamespace): Promise<StoredReconcileReport | null> {
+  return kv.get<StoredReconcileReport>(RECONCILE_REPORT_KEY, 'json');
+}
+
 export async function getPublicationUri(kv: KVNamespace): Promise<string | null> {
   const entry = await kv.get<{ atUri: string }>(PUBLICATION_KEY, 'json');
   return entry?.atUri ?? null;

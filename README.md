@@ -228,17 +228,22 @@ the backfill cron loose.
    GHOST_ADMIN_API_KEY=... GHOST_WEBHOOK_SECRET=... \
      node scripts/create-webhooks.mjs https://your-site.ghost.io https://yourdomain.com/_atproto/ghost-webhook
    ```
-9. Backfill the archive with full-mode reconcile — repeat until the response
-   shows `"capped": false` (each run writes at most 200 records, ~200ms
-   apart, to be polite to the PDS):
+9. Backfill the archive — one command, runs in the background:
    ```bash
-   curl -X POST "https://yourdomain.com/_atproto/reconcile?full=1" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   curl -X POST "https://yourdomain.com/_atproto/reconcile?full=1&max=1000" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
-   Without `?full=1` the route runs the same windowed repair as the daily
-   cron (posts updated in the last 3 days, plus orphan cleanup). Add
-   `&max=1000` to write more records per run (each created record costs ~8
-   subrequests; the config's `limits.subrequests: 10000` accommodates the
-   ceiling — a 1000-write run finishes a 5,000-post archive in ~5 runs).
+   This returns `202 queued` immediately. The backfill runs in the queue
+   consumer (a multi-minute job can't live inside an HTTP request), writing
+   up to `max` records per batch ~200ms apart and automatically chaining the
+   next batch until the whole archive is done. Watch progress with
+   `npx wrangler tail`, or poll the latest batch report:
+   ```bash
+   curl "https://yourdomain.com/_atproto/reconcile" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   ```
+   The backfill is finished when that report shows `"capped": false`.
+   A plain `POST` without `?full=1` runs the windowed repair (same as the
+   daily cron: posts updated in the last 3 days, plus orphan cleanup)
+   synchronously and returns its report directly.
 
 ## Trying it with a single post first
 

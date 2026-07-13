@@ -44,6 +44,17 @@ describe('post state', () => {
   });
 });
 
+describe('reconcile report', () => {
+  it('round-trips the last report with a timestamp', async () => {
+    const { setLastReconcileReport, getLastReconcileReport } = await import('../src/state/kv');
+    expect(await getLastReconcileReport(env.STATE)).toBeNull();
+    await setLastReconcileReport(env.STATE, { mode: 'full', created: 5 });
+    const stored = await getLastReconcileReport(env.STATE);
+    expect(stored?.report).toEqual({ mode: 'full', created: 5 });
+    expect(stored?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
 describe('publication', () => {
   it('round-trips the publication AT-URI', async () => {
     expect(await getPublicationUri(env.STATE)).toBeNull();
