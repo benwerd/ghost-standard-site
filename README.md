@@ -218,10 +218,15 @@ the backfill cron loose.
    sure it's square and ≥256×256 in Ghost settings, then re-run setup if you
    change it.)
 8. Create the webhooks. The Ghost Admin UI can't set webhook secrets, and
-   Ghost only signs requests when a secret exists, so use the Admin API:
+   Ghost only signs requests when a secret exists, so use the Admin API.
+   The first argument is your **admin domain**: on Ghost(Pro) that's the
+   `*.ghost.io` address in your browser when you're logged into Ghost Admin
+   (the Admin API isn't served on the custom domain); self-hosted, it's the
+   same as your site URL. The second argument — where webhooks get
+   delivered — stays on your real domain:
    ```bash
    GHOST_ADMIN_API_KEY=... GHOST_WEBHOOK_SECRET=... \
-     node scripts/create-webhooks.mjs https://yourdomain.com https://yourdomain.com/_atproto/ghost-webhook
+     node scripts/create-webhooks.mjs https://your-site.ghost.io https://yourdomain.com/_atproto/ghost-webhook
    ```
 9. Backfill the archive — repeat until the response shows `"capped": false`
    (each run writes at most 200 records, ~200ms apart, to be polite to the

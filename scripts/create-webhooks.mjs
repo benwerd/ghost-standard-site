@@ -4,7 +4,16 @@
 //
 // Usage:
 //   GHOST_ADMIN_API_KEY=<id>:<hexsecret> GHOST_WEBHOOK_SECRET=<secret> \
-//     node scripts/create-webhooks.mjs https://blog.example.org https://blog.example.org/_atproto/ghost-webhook
+//     node scripts/create-webhooks.mjs <ADMIN-URL> <TARGET-URL>
+//
+//   <ADMIN-URL>  where Ghost Admin lives. On Ghost(Pro) this is your *.ghost.io
+//                admin domain (the one in your browser's address bar when logged
+//                into Ghost Admin, e.g. https://your-site.ghost.io) — the Admin
+//                API is NOT served on your custom domain, it 302s there, and a
+//                redirected POST turns into a bodyless GET and fails with 404.
+//                Self-hosted: same as your site URL.
+//   <TARGET-URL> the webhook receiver on your real domain,
+//                e.g. https://blog.example.org/_atproto/ghost-webhook
 //
 // GHOST_ADMIN_API_KEY comes from the same custom integration as the Content API key
 // (Ghost Admin → Settings → Advanced → Integrations → your integration → Admin API key).
@@ -43,7 +52,16 @@ for (const event of events) {
     body: JSON.stringify({
       webhooks: [{ event, target_url: targetUrl, name: `standard.site ${event}`, secret: webhookSecret }],
     }),
+    redirect: 'manual',
   });
+  if ([301, 302, 307, 308].includes(res.status)) {
+    const location = res.headers.get('location') ?? '(unknown)';
+    console.error(
+      `${event}: the Admin API redirected (${res.status}) to ${location}\n` +
+        `Pass the admin domain as the first argument instead, e.g. ${new URL(location).origin}`
+    );
+    process.exit(1);
+  }
   const body = await res.text();
   console.log(event, res.status, res.ok ? 'ok' : body);
 }
