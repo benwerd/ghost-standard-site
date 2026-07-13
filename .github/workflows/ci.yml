@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # vitest runs in workerd via @cloudflare/vitest-pool-workers, against the
+      # tracked wrangler.example.jsonc — no wrangler.jsonc or .dev.vars needed.
+      - run: npm test
+      - name: Syntax-check deploy scripts
+        run: for f in scripts/*.mjs; do node --check "$f"; done
