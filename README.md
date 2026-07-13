@@ -235,7 +235,10 @@ the backfill cron loose.
    curl -X POST "https://yourdomain.com/_atproto/reconcile?full=1" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
    Without `?full=1` the route runs the same windowed repair as the daily
-   cron (posts updated in the last 3 days, plus orphan cleanup).
+   cron (posts updated in the last 3 days, plus orphan cleanup). Add
+   `&max=1000` to write more records per run (each created record costs ~8
+   subrequests; the config's `limits.subrequests: 10000` accommodates the
+   ceiling — a 1000-write run finishes a 5,000-post archive in ~5 runs).
 
 ## Trying it with a single post first
 

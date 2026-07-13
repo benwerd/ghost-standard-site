@@ -24,9 +24,13 @@ export default {
     if (pathname === '/_atproto/reconcile' && request.method === 'POST') {
       if (!isAuthorizedAdmin(request, env)) return new Response('unauthorized', { status: 401 });
       try {
-        // default: windowed repair; ?full=1: archive backfill / deep repair
-        const full = new URL(request.url).searchParams.get('full') === '1';
-        const report = await reconcile(env, { full });
+        // default: windowed repair; ?full=1: archive backfill / deep repair;
+        // ?max=N tunes PDS writes per run (default 200, ceiling 1000)
+        const params = new URL(request.url).searchParams;
+        const full = params.get('full') === '1';
+        const max = Number(params.get('max'));
+        const maxWrites = Number.isFinite(max) && max > 0 ? Math.min(max, 1000) : undefined;
+        const report = await reconcile(env, { full, maxWrites });
         return Response.json(report);
       } catch (err) {
         return new Response(`reconcile failed: ${(err as Error).message}`, { status: 500 });
