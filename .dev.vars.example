@@ -1,21 +1,49 @@
-# Copy to .dev.vars (gitignored) and fill in. In production, set every one
-# of these with `npx wrangler secret put <NAME>` — nothing is committed.
+# Copy to .dev.vars (gitignored) and fill in every value.
+# This file is the single source of truth: it drives local dev, wrangler.jsonc
+# generation (npm run configure), and production secrets (npm run push-secrets).
+# Full walkthrough with screenshots-level detail: README "Configuration" section.
 
-# Secrets
-GHOST_WEBHOOK_SECRET=replace-with-a-long-random-string
-ATPROTO_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
-GHOST_CONTENT_API_KEY=replace-me
-
-# Identity and site configuration
-ATPROTO_HANDLE=your-handle.example.com
-ATPROTO_DID=did:plc:replaceme
-ATPROTO_PDS_URL=https://your-pds.example.com
+# Canonical base URL of your blog: https, no trailing slash, no path.
+# The one readers see (proxied through Cloudflare), not *.ghost.io.
+# The Worker's route/zone and the publication record's url derive from this.
 GHOST_URL=https://yourblog.example.com
 
-# Optional: override the publication name pulled from Ghost settings
+# YOU INVENT THIS — generate with:  openssl rand -hex 32
+# Registered with Ghost by scripts/create-webhooks.mjs (Ghost signs webhooks
+# with it), verified by the Worker, and doubles as the admin bearer token.
+GHOST_WEBHOOK_SECRET=replace-with-a-long-random-string
+
+# Ghost Admin → Settings → Advanced → Integrations → Add custom integration
+# → copy the CONTENT API key (26 hex chars). (The Admin API key from the same
+# page is NOT stored here — it's passed as GHOST_ADMIN_API_KEY on the shell
+# when running scripts/create-webhooks.mjs.)
+GHOST_CONTENT_API_KEY=replace-me
+
+# Your Bluesky/atproto handle without the leading @ (as shown on your profile).
+ATPROTO_HANDLE=your-handle.example.com
+
+# Resolve from your handle — don't type from memory:
+#   curl "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=YOUR_HANDLE"
+# Copy the did:plc:… (or did:web:…) value. The Worker refuses to write if its
+# session resolves to any other DID.
+ATPROTO_DID=did:plc:replaceme
+
+# Your PDS endpoint, from your DID document:
+#   curl "https://plc.directory/YOUR_DID"
+# → service entry with "id": "#atproto_pds" → its serviceEndpoint,
+# e.g. https://inkcap.us-east.host.bsky.network for Bluesky-hosted accounts.
+ATPROTO_PDS_URL=https://your-pds.example.com
+
+# bsky.app → Settings → Privacy and security → App passwords → Add App Password.
+# Shown once; looks like abcd-efgh-ijkl-mnop. NEVER your main password.
+# DM access not needed. If lost: revoke, recreate, re-run push-secrets.
+ATPROTO_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+
+# Optional: override the publication name; otherwise Ghost's site title is
+# used at setup time.
 # PUBLICATION_NAME=
 
-# Deployment config, consumed by scripts/configure.mjs (not by the Worker).
-# The route/zone domain is derived from GHOST_URL automatically.
-# From: npx wrangler kv namespace create STATE
+# From:  npx wrangler kv namespace create STATE
+# Copy the 32-hex "id" from the printed snippet. Deploy-time only, consumed
+# by scripts/configure.mjs — never pushed to the Worker.
 KV_NAMESPACE_ID=
