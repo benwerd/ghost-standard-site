@@ -1,0 +1,3 @@
+GHOST_WEBHOOK_SECRET=replace-me
+ATPROTO_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+GHOST_CONTENT_API_KEY=replace-me
