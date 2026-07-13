@@ -4,8 +4,8 @@ import fixture from './fixtures/post-published.json';
 import type { GhostPost } from '../src/ghost/types';
 
 const post = fixture.post.current as GhostPost;
-const PUB_URI = 'at://did:plc:77tdak46psveqneyegsdyc7l/site.standard.publication/self';
-const GHOST_URL = 'https://werd.io';
+const PUB_URI = 'at://did:plc:exampleuser0000000000000/site.standard.publication/self';
+const GHOST_URL = 'https://blog.example.org';
 
 describe('normalizePath', () => {
   it('ensures leading slash and strips trailing slashes', () => {
@@ -65,7 +65,7 @@ describe('contentHash', () => {
   it('changes when title, path, excerpt, tags, or feature image change', async () => {
     const base = await contentHash(post, GHOST_URL);
     expect(await contentHash({ ...post, title: 'New' }, GHOST_URL)).not.toBe(base);
-    expect(await contentHash({ ...post, url: 'https://werd.io/renamed/' }, GHOST_URL)).not.toBe(base);
+    expect(await contentHash({ ...post, url: 'https://blog.example.org/renamed/' }, GHOST_URL)).not.toBe(base);
     expect(await contentHash({ ...post, custom_excerpt: 'New excerpt' }, GHOST_URL)).not.toBe(base);
     expect(await contentHash({ ...post, tags: [] }, GHOST_URL)).not.toBe(base);
     expect(await contentHash({ ...post, feature_image: null }, GHOST_URL)).not.toBe(base);

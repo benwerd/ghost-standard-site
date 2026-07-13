@@ -4,7 +4,7 @@ import { getPathUri, getPublicationUri } from '../state/kv';
 
 /**
  * Point the incoming request at the Ghost origin. In production on the
- * werd.io/* route this resolves to a same-zone subrequest that goes straight
+ * configured domain's route this resolves to a same-zone subrequest that goes straight
  * to origin; in `wrangler dev` it retargets localhost URLs at GHOST_URL.
  */
 export function buildOriginRequest(request: Request, ghostUrl: string): Request {

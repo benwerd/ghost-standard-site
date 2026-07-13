@@ -26,7 +26,7 @@ function fakeWriter() {
 }
 
 function deps(writer: PdsWriter) {
-  return { writer, kv: env.STATE, publicationUri: PUB_URI, ghostUrl: 'https://werd.io' };
+  return { writer, kv: env.STATE, publicationUri: PUB_URI, ghostUrl: 'https://blog.example.org' };
 }
 
 beforeEach(async () => {
@@ -69,7 +69,7 @@ describe('processEvent upsert', () => {
     const { writer } = fakeWriter();
     await processEvent({ kind: 'upsert', post }, deps(writer));
     await processEvent(
-      { kind: 'upsert', post: { ...post, slug: 'renamed', url: 'https://werd.io/renamed/' } },
+      { kind: 'upsert', post: { ...post, slug: 'renamed', url: 'https://blog.example.org/renamed/' } },
       deps(writer)
     );
     expect(await getPathUri(env.STATE, '/renamed')).not.toBeNull();

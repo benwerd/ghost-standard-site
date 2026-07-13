@@ -4,7 +4,7 @@
 //
 // Usage:
 //   GHOST_ADMIN_API_KEY=<id>:<hexsecret> GHOST_WEBHOOK_SECRET=<secret> \
-//     node scripts/create-webhooks.mjs https://werd.io https://werd.io/_atproto/ghost-webhook
+//     node scripts/create-webhooks.mjs https://blog.example.org https://blog.example.org/_atproto/ghost-webhook
 //
 // GHOST_ADMIN_API_KEY comes from the same custom integration as the Content API key
 // (Ghost Admin → Settings → Advanced → Integrations → your integration → Admin API key).

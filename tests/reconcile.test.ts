@@ -27,7 +27,7 @@ function fakeWriter() {
 }
 
 function deps(writer: PdsWriter) {
-  return { writer, kv: env.STATE, publicationUri: PUB_URI, ghostUrl: 'https://werd.io' };
+  return { writer, kv: env.STATE, publicationUri: PUB_URI, ghostUrl: 'https://blog.example.org' };
 }
 
 beforeEach(async () => {
@@ -40,7 +40,7 @@ describe('reconcilePosts', () => {
     const { writer, calls } = fakeWriter();
     // seed an orphan that Ghost no longer has
     await processEvent(
-      { kind: 'upsert', post: { ...post, id: 'orphan1', slug: 'gone', url: 'https://werd.io/gone/' } },
+      { kind: 'upsert', post: { ...post, id: 'orphan1', slug: 'gone', url: 'https://blog.example.org/gone/' } },
       deps(writer)
     );
     calls.puts.length = 0;
@@ -62,8 +62,8 @@ describe('reconcilePosts', () => {
     const { writer } = fakeWriter();
     const many = [
       post,
-      { ...post, id: 'p2', slug: 'two', url: 'https://werd.io/two/' },
-      { ...post, id: 'p3', slug: 'three', url: 'https://werd.io/three/' },
+      { ...post, id: 'p2', slug: 'two', url: 'https://blog.example.org/two/' },
+      { ...post, id: 'p3', slug: 'three', url: 'https://blog.example.org/three/' },
       { ...post, id: 'members', visibility: 'members' },
     ];
     const report = await reconcilePosts(many, deps(writer), { maxWrites: 2, sleepMs: 0 });

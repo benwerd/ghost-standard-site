@@ -5,7 +5,8 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
-  "routes": [{ "pattern": "werd.io/*", "zone_name": "werd.io" }],
+  // Set to your blog's domain (must be a zone on your Cloudflare account).
+  "routes": [{ "pattern": "REPLACE_WITH_YOUR_DOMAIN/*", "zone_name": "REPLACE_WITH_YOUR_DOMAIN" }],
   "kv_namespaces": [
     { "binding": "STATE", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
   ],
@@ -20,11 +21,10 @@
       }
     ]
   },
-  "triggers": { "crons": ["17 6 * * *"] },
-  "vars": {
-    "ATPROTO_HANDLE": "werd.io",
-    "ATPROTO_DID": "did:plc:77tdak46psveqneyegsdyc7l",
-    "ATPROTO_PDS_URL": "https://inkcap.us-east.host.bsky.network",
-    "GHOST_URL": "https://werd.io"
-  }
+  "triggers": { "crons": ["17 6 * * *"] }
+  // No identity, domain, or auth values are committed here. All runtime
+  // configuration (ATPROTO_HANDLE, ATPROTO_DID, ATPROTO_PDS_URL, GHOST_URL,
+  // PUBLICATION_NAME) and secrets (GHOST_WEBHOOK_SECRET, ATPROTO_APP_PASSWORD,
+  // GHOST_CONTENT_API_KEY) are supplied via `wrangler secret put` in
+  // production and `.dev.vars` locally. See README.
 }

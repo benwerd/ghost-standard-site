@@ -1,14 +1,14 @@
 # ghost-standard-site
 
-Syndicates [werd.io](https://werd.io) (Ghost) to AT Protocol using the
+Syndicates a Ghost blog to AT Protocol using the
 [standard.site](https://standard.site) lexicons. Every public published post
-becomes a `site.standard.document` record in Ben's own repo
-(`did:plc:77tdak46psveqneyegsdyc7l`); the site is one
-`site.standard.publication` record. A Cloudflare Worker on `werd.io/*`:
+becomes a `site.standard.document` record in your own atproto repo, under
+your own DID; the site is one `site.standard.publication` record. A
+Cloudflare Worker routed in front of your domain:
 
 - receives Ghost webhooks (`POST /_atproto/ghost-webhook`, HMAC-verified) and
   enqueues them on a Cloudflare Queue;
-- a queue consumer writes records to the PDS with automatic retry;
+- a queue consumer writes records to your PDS with automatic retry;
 - proxies all other traffic to the Ghost origin, injecting
   `<link rel="site.standard.document">` (and the publication hint tag) into
   post pages via HTMLRewriter;
@@ -18,46 +18,72 @@ becomes a `site.standard.document` record in Ben's own repo
   KV and repairs drift — which doubles as the archive backfill.
 
 **Content policy:** metadata + excerpt only. The canonical content lives at
-werd.io; full post bodies are never syndicated.
+your blog; full post bodies are never syndicated.
+
+**Configuration policy:** no identities, domains, or auth material are
+committed to this repo. Everything is supplied at runtime: locally via
+`.dev.vars` (gitignored), in production via `wrangler secret put`. The only
+placeholders you edit in tracked files are the route pattern and KV
+namespace id in `wrangler.jsonc` (Cloudflare routes can't come from env
+vars).
+
+## Configuration reference
+
+| Name | Kind | Description |
+|---|---|---|
+| `GHOST_WEBHOOK_SECRET` | secret | Long random string; signs Ghost webhooks and doubles as the admin bearer token |
+| `ATPROTO_APP_PASSWORD` | secret | App password for your atproto account |
+| `GHOST_CONTENT_API_KEY` | secret | From your Ghost custom integration |
+| `ATPROTO_HANDLE` | config | e.g. `yourdomain.com` |
+| `ATPROTO_DID` | config | Your DID; the Worker refuses to write if the session resolves to anything else |
+| `ATPROTO_PDS_URL` | config | Your PDS endpoint (find it in your DID document, e.g. via plc.directory) |
+| `GHOST_URL` | config | Canonical base URL of the blog, no trailing slash |
+| `PUBLICATION_NAME` | config, optional | Overrides the publication name pulled from Ghost settings |
+
+In production set **all of these** (config values included) with
+`npx wrangler secret put <NAME>` so nothing lands in tracked files.
 
 ## Setup
 
 1. `npm install`
-2. `npx wrangler kv namespace create STATE` → paste the id into
+2. Edit `wrangler.jsonc`: set the route `pattern`/`zone_name` to your domain
+   (it must be a Cloudflare zone on your account, orange-clouded).
+3. `npx wrangler kv namespace create STATE` → paste the id into
    `wrangler.jsonc` (replacing `REPLACE_WITH_KV_NAMESPACE_ID`)
-3. `npx wrangler queues create ghost-standard-site-events`
-4. Secrets:
+4. `npx wrangler queues create ghost-standard-site-events`
+5. Set all secrets and config values:
    ```bash
-   npx wrangler secret put GHOST_WEBHOOK_SECRET     # invent a long random string
-   npx wrangler secret put ATPROTO_APP_PASSWORD     # app password for werd.io (bsky.app → Settings → App Passwords)
-   npx wrangler secret put GHOST_CONTENT_API_KEY    # Ghost Admin → Integrations → custom integration → Content API key
+   for n in GHOST_WEBHOOK_SECRET ATPROTO_APP_PASSWORD GHOST_CONTENT_API_KEY \
+            ATPROTO_HANDLE ATPROTO_DID ATPROTO_PDS_URL GHOST_URL; do
+     npx wrangler secret put $n
+   done
    ```
-5. `npx wrangler deploy`
-6. Create the publication record:
+6. `npx wrangler deploy`
+7. Create the publication record:
    ```bash
-   curl -X POST https://werd.io/_atproto/setup -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
-   Confirm: `curl https://werd.io/.well-known/site.standard.publication`
+   Confirm: `curl https://yourdomain.com/.well-known/site.standard.publication`
    returns the AT-URI. (Ghost's site icon becomes the publication icon — make
    sure it's square and ≥256×256 in Ghost settings, then re-run setup if you
    change it.)
-7. Create the webhooks. The Ghost Admin UI can't set webhook secrets, and
+8. Create the webhooks. The Ghost Admin UI can't set webhook secrets, and
    Ghost only signs requests when a secret exists, so use the Admin API:
    ```bash
    GHOST_ADMIN_API_KEY=... GHOST_WEBHOOK_SECRET=... \
-     node scripts/create-webhooks.mjs https://werd.io https://werd.io/_atproto/ghost-webhook
+     node scripts/create-webhooks.mjs https://yourdomain.com https://yourdomain.com/_atproto/ghost-webhook
    ```
-8. Backfill the archive — repeat until the response shows `"capped": false`
+9. Backfill the archive — repeat until the response shows `"capped": false`
    (each run writes at most 200 records, ~200ms apart, to be polite to the
    PDS):
    ```bash
-   curl -X POST https://werd.io/_atproto/reconcile -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
+   curl -X POST https://yourdomain.com/_atproto/reconcile -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
 
 ## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars   # fill in real values as needed
+cp .dev.vars.example .dev.vars   # fill in real values (gitignored)
 npm run dev                       # proxies localhost:8787 → GHOST_URL
 npm test                          # vitest in workerd via @cloudflare/vitest-pool-workers
 npm run typecheck
@@ -69,12 +95,12 @@ npm run typecheck
 2. The record exists (find the rkey in the Worker's queue-consumer logs, or
    read KV key `post:{ghost_post_id}`):
    ```bash
-   curl "https://inkcap.us-east.host.bsky.network/xrpc/com.atproto.repo.getRecord?repo=did:plc:77tdak46psveqneyegsdyc7l&collection=site.standard.document&rkey=<rkey>"
+   curl "$ATPROTO_PDS_URL/xrpc/com.atproto.repo.getRecord?repo=$ATPROTO_DID&collection=site.standard.document&rkey=<rkey>"
    ```
-   Also browsable at
-   <https://pdsls.dev/at/did:plc:77tdak46psveqneyegsdyc7l/site.standard.document>.
-3. `curl -s https://werd.io/<slug>/ | grep site.standard` shows both link
-   tags. (KV is eventually consistent — allow up to a minute after publish.)
+   Also browsable at `https://pdsls.dev/at/<your-did>/site.standard.document`.
+3. `curl -s https://yourdomain.com/<slug>/ | grep site.standard` shows both
+   link tags. (KV is eventually consistent — allow up to a minute after
+   publish.)
 4. Post the URL in Bluesky; the link should render as an enhanced article
    card. Records have passed third-party validators while silently failing
    Bluesky's crawler — **the Bluesky card is the real test.**

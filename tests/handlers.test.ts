@@ -37,7 +37,7 @@ describe('handleWebhook', () => {
 
   it('enqueues a valid signed event and returns 202', async () => {
     const sent: SyncEvent[] = [];
-    const request = new Request('https://werd.io/_atproto/ghost-webhook', {
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {
       method: 'POST',
       body,
       headers: { 'x-ghost-signature': await signedHeader(body, SECRET, Date.now()) },
@@ -49,7 +49,7 @@ describe('handleWebhook', () => {
   });
   it('rejects a bad signature with 401 and enqueues nothing', async () => {
     const sent: SyncEvent[] = [];
-    const request = new Request('https://werd.io/_atproto/ghost-webhook', {
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {
       method: 'POST',
       body,
       headers: { 'x-ghost-signature': await signedHeader(body + 'tamper', SECRET, Date.now()) },
@@ -61,7 +61,7 @@ describe('handleWebhook', () => {
   it('acks ignorable events with 200 without enqueueing', async () => {
     const sent: SyncEvent[] = [];
     const ignorable = JSON.stringify({ event: 'page.published', page: {} });
-    const request = new Request('https://werd.io/_atproto/ghost-webhook', {
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {
       method: 'POST',
       body: ignorable,
       headers: { 'x-ghost-signature': await signedHeader(ignorable, SECRET, Date.now()) },
@@ -90,9 +90,9 @@ describe('buildOriginRequest', () => {
   it('rewrites the host to the Ghost origin, preserving path and query', () => {
     const req = buildOriginRequest(
       new Request('http://localhost:8787/hello-atmosphere/?x=1'),
-      'https://werd.io'
+      'https://blog.example.org'
     );
-    expect(req.url).toBe('https://werd.io/hello-atmosphere/?x=1');
+    expect(req.url).toBe('https://blog.example.org/hello-atmosphere/?x=1');
   });
 });
 
