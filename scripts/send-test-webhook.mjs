@@ -2,10 +2,13 @@
 // Sends ONE signed Ghost-style webhook for ONE real post through the Worker —
 // the lightest end-to-end test. No Ghost webhook config, no cron, no backfill.
 //
-//   node scripts/send-test-webhook.mjs                 # upsert your most recent post, via local wrangler dev
-//   node scripts/send-test-webhook.mjs --slug my-post  # pick a specific post
-//   node scripts/send-test-webhook.mjs --delete        # remove that post's record again (undo)
-//   node scripts/send-test-webhook.mjs --url https://yourdomain.com/_atproto/ghost-webhook   # against production
+//   npm run test-post                                  # syndicate your most recent post, via local wrangler dev
+//   npm run test-post -- --slug my-post                # pick a specific post
+//   npm run test-post -- --delete                      # remove that post's record again (undo)
+//   npm run test-post -- --url https://yourdomain.com/_atproto/ghost-webhook   # against production
+//
+// Reruns REGENERATE the record in place (same rkey): the request carries
+// ?force=1, which tells the Worker to bypass its content-hash debounce.
 //
 // The post is fetched from your real Ghost Content API, wrapped in the same
 // {event, post: {current}} envelope Ghost sends, signed with
@@ -23,7 +26,8 @@ const argValue = (flag) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const slug = argValue('--slug');
-const target = argValue('--url') ?? 'http://localhost:8787/_atproto/ghost-webhook';
+const target = new URL(argValue('--url') ?? 'http://localhost:8787/_atproto/ghost-webhook');
+if (!doDelete) target.searchParams.set('force', '1'); // rerun = regenerate, not 'skipped'
 
 const vars = readDevVars();
 for (const key of ['GHOST_URL', 'GHOST_CONTENT_API_KEY', 'GHOST_WEBHOOK_SECRET']) {

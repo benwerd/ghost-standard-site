@@ -32,7 +32,8 @@ export async function processEvent(event: SyncEvent, deps: SyncDeps): Promise<Sy
   const post = event.post;
   const state = await getPostState(deps.kv, post.id);
   const hash = await contentHash(post, deps.ghostUrl);
-  if (state && state.contentHash === hash) return 'skipped';
+  // force (from the signed test path) regenerates even when nothing changed
+  if (!event.force && state && state.contentHash === hash) return 'skipped';
 
   const rkey = state?.rkey ?? deriveRkey(post);
   let coverImage: unknown | undefined;

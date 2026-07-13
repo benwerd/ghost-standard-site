@@ -23,6 +23,9 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
   const event = classifyWebhook(body);
   if (!event) return new Response('ignored', { status: 200 });
 
-  await env.EVENTS.send(event);
+  // ?force=1 (signature still required) bypasses the content-hash debounce —
+  // used by scripts/send-test-webhook.mjs to regenerate a record on rerun.
+  const force = new URL(request.url).searchParams.get('force') === '1';
+  await env.EVENTS.send(event.kind === 'upsert' && force ? { ...event, force: true } : event);
   return new Response('queued', { status: 202 });
 }

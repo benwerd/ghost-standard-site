@@ -233,11 +233,20 @@ the backfill cron loose.
 ## Trying it with a single post first
 
 You don't need Ghost webhooks, the cron, or a backfill to prove the pipeline
-works. [scripts/send-test-webhook.mjs](scripts/send-test-webhook.mjs) fetches
-**one real post** from your Content API, wraps it in the exact envelope Ghost
-sends, signs it with your webhook secret, and POSTs it to the Worker — so a
-single record flows through the entire real path (signature check → queue →
-PDS write → KV → link tags), and it's fully reversible.
+works:
+
+```bash
+npm run test-post
+```
+
+This fetches **your most recent post** from the Content API, wraps it in the
+exact envelope Ghost sends, signs it with your webhook secret, and POSTs it
+to the Worker — so a single record flows through the entire real path
+(signature check → queue → PDS write → KV → link tags). **Rerunning it
+regenerates the record in place** (same rkey; it bypasses the content-hash
+debounce via a signed `?force=1`), so you can tweak and rerun freely.
+`-- --slug <slug>` picks a different post; `-- --delete` removes the record
+again. Fully reversible.
 
 > **Why the cron matters here:** a normal deploy registers the daily
 > reconcile cron, and once the publication record exists that cron will
@@ -253,7 +262,7 @@ npm run dev                                   # Worker + local queue on :8787
 # in another terminal:
 SECRET=$(grep '^GHOST_WEBHOOK_SECRET=' .dev.vars | cut -d= -f2-)
 curl -X POST http://localhost:8787/_atproto/setup -H "Authorization: Bearer $SECRET"
-node scripts/send-test-webhook.mjs            # syndicate your most recent post
+npm run test-post                             # syndicate your most recent post
 ```
 
 Notes on what's real vs. local here: KV and the queue are local simulations,
@@ -266,13 +275,16 @@ document records must reference a real publication). Verify:
 curl "$ATPROTO_PDS_URL/xrpc/com.atproto.repo.getRecord?repo=$ATPROTO_DID&collection=site.standard.document&rkey=<rkey>"
 # link tags are injected on the proxied page:
 curl -s http://localhost:8787/<slug>/ | grep site.standard
-# idempotency — run it again, the dev log shows "skipped":
-node scripts/send-test-webhook.mjs
+# rerun — regenerates the record in place, dev log shows "updated" with the same rkey:
+npm run test-post
 ```
 
-Undo at any time: `node scripts/send-test-webhook.mjs --delete` (removes the
-document record and KV entries; the publication record can stay — it's inert
-on its own).
+(Real Ghost webhooks don't carry `force`, so the save-spam debounce still
+applies in normal operation — the dev log shows "skipped" only for those.)
+
+Undo at any time: `npm run test-post -- --delete` (removes the document
+record and KV entries; the publication record can stay — it's inert on its
+own).
 
 ### Stage 2: production, still just one post
 
@@ -289,13 +301,15 @@ deployed Worker:
 ```bash
 curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $SECRET"
 curl https://yourdomain.com/.well-known/site.standard.publication
-node scripts/send-test-webhook.mjs --url https://yourdomain.com/_atproto/ghost-webhook
+npm run test-post -- --url https://yourdomain.com/_atproto/ghost-webhook
 npx wrangler tail   # watch the queue consumer log the write
 ```
 
 Give KV up to a minute, then check `curl -s https://yourdomain.com/<slug>/ |
 grep site.standard`, and post the URL on Bluesky — the enhanced article card
-is the definitive pass. Undo with `--delete --url …` as above.
+is the definitive pass. Rerun the same command as often as you like while
+iterating; it regenerates the same record. Undo with
+`npm run test-post -- --delete --url …`.
 
 ### When you're confident
 

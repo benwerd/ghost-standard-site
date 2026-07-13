@@ -47,6 +47,17 @@ describe('handleWebhook', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].kind).toBe('upsert');
   });
+  it('marks the event force when ?force=1 is set on a signed request', async () => {
+    const sent: SyncEvent[] = [];
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook?force=1', {
+      method: 'POST',
+      body,
+      headers: { 'x-ghost-signature': await signedHeader(body, SECRET, Date.now()) },
+    });
+    const res = await handleWebhook(request, webhookEnv(sent));
+    expect(res.status).toBe(202);
+    expect(sent[0]).toMatchObject({ kind: 'upsert', force: true });
+  });
   it('rejects a bad signature with 401 and enqueues nothing', async () => {
     const sent: SyncEvent[] = [];
     const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {

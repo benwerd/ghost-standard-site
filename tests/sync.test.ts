@@ -75,6 +75,14 @@ describe('processEvent upsert', () => {
     expect(await getPathUri(env.STATE, '/renamed')).not.toBeNull();
     expect(await getPathUri(env.STATE, '/hello-atmosphere')).toBeNull();
   });
+  it('force bypasses the hash debounce and regenerates the record in place', async () => {
+    const { writer, calls } = fakeWriter();
+    await processEvent({ kind: 'upsert', post }, deps(writer));
+    const result = await processEvent({ kind: 'upsert', post, force: true }, deps(writer));
+    expect(result).toBe('updated');
+    expect(calls.puts).toHaveLength(2);
+    expect(calls.puts[1].rkey).toBe(calls.puts[0].rkey);
+  });
   it('omits coverImage when the blob fetch fails, and still writes the record', async () => {
     const { writer, calls } = fakeWriter();
     writer.fetchImageBlob = async () => undefined;

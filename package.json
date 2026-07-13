@@ -6,6 +6,7 @@
   "scripts": {
     "configure": "node scripts/configure.mjs",
     "push-secrets": "node scripts/secrets-json.mjs | wrangler secret bulk",
+    "test-post": "node scripts/send-test-webhook.mjs",
     "predev": "node scripts/configure.mjs",
     "dev": "wrangler dev",
     "predeploy": "node scripts/configure.mjs",

@@ -1,7 +1,7 @@
 import type { GhostPost } from './ghost/types';
 
 export type SyncEvent =
-  | { kind: 'upsert'; post: GhostPost }
+  | { kind: 'upsert'; post: GhostPost; force?: boolean }
   | { kind: 'delete'; postId: string };
 
 export interface Env {
