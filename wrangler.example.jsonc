@@ -1,3 +1,5 @@
+// Template — copy to wrangler.jsonc (gitignored) and fill in your domain and
+// KV namespace id. The real wrangler.jsonc never gets committed.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ghost-standard-site",

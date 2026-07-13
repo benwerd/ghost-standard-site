@@ -21,11 +21,11 @@ Cloudflare Worker routed in front of your domain:
 your blog; full post bodies are never syndicated.
 
 **Configuration policy:** no identities, domains, or auth material are
-committed to this repo. Everything is supplied at runtime: locally via
-`.dev.vars` (gitignored), in production via `wrangler secret put`. The only
-placeholders you edit in tracked files are the route pattern and KV
-namespace id in `wrangler.jsonc` (Cloudflare routes can't come from env
-vars).
+committed to this repo — tracked files contain placeholders only. Runtime
+values are supplied via `.dev.vars` (gitignored) locally and
+`wrangler secret put` in production; deployment config (your domain's route,
+KV namespace id) lives in `wrangler.jsonc`, which is gitignored and copied
+from the tracked `wrangler.example.jsonc` template.
 
 ## Configuration reference
 
@@ -46,9 +46,10 @@ In production set **all of these** (config values included) with
 ## Setup
 
 1. `npm install`
-2. Edit `wrangler.jsonc`: set the route `pattern`/`zone_name` to your domain
-   (it must be a Cloudflare zone on your account, orange-clouded).
-3. `npx wrangler kv namespace create STATE` → paste the id into
+2. `cp wrangler.example.jsonc wrangler.jsonc` (gitignored), then set the
+   route `pattern`/`zone_name` to your domain (it must be a Cloudflare zone
+   on your account, orange-clouded).
+3. `npx wrangler kv namespace create STATE` → paste the id into your
    `wrangler.jsonc` (replacing `REPLACE_WITH_KV_NAMESPACE_ID`)
 4. `npx wrangler queues create ghost-standard-site-events`
 5. Set all secrets and config values:
@@ -83,8 +84,9 @@ In production set **all of these** (config values included) with
 ## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars   # fill in real values (gitignored)
-npm run dev                       # proxies localhost:8787 → GHOST_URL
+cp wrangler.example.jsonc wrangler.jsonc   # gitignored; placeholders fine for dev
+cp .dev.vars.example .dev.vars             # fill in real values (gitignored)
+npm run dev                                # proxies localhost:8787 → GHOST_URL
 npm test                          # vitest in workerd via @cloudflare/vitest-pool-workers
 npm run typecheck
 ```
