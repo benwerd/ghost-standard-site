@@ -1,11 +1,18 @@
 /**
- * The reconcile sweep: the safety net under Ghost's fire-once webhooks, and
- * the archive backfill. Two modes, both idempotent and both capped:
+ * The reconcile sweep: the safety net under Ghost's webhooks, and the
+ * archive backfill.
+ *
+ * Why it exists: Ghost fires each webhook exactly once, best-effort, with
+ * no retries, so sooner or later one gets lost, and without a repair
+ * mechanism that post would silently never sync. Reconcile periodically
+ * compares what Ghost has against what we've synced and fixes the
+ * difference. It's also how a pre-existing archive of posts gets imported
+ * in the first place. Two modes, both idempotent and both capped:
  *
  * WINDOWED (daily cron + plain admin POST): hash-checked upserts for posts
  * updated in the last WINDOW_DAYS (catches missed publish/edit webhooks),
  * plus orphan deletion. Steady-state cost is O(window) + one ids-only
- * archive enumeration — ~55 subrequests regardless of archive size.
+ * archive enumeration: ~55 subrequests regardless of archive size.
  *
  * FULL (?full=1 admin POST, run inside the queue consumer because a batch
  * takes minutes): creates records for posts KV has never seen, skipping
@@ -18,7 +25,7 @@
  *
  * Politeness: PDS writes are spaced `sleepMs` apart and capped per batch at
  * `maxWrites` (which also keeps a batch inside per-invocation subrequest
- * limits — see limits.subrequests in wrangler.example.jsonc).
+ * limits; see limits.subrequests in wrangler.example.jsonc).
  */
 import type { Env } from './env';
 import type { GhostPost } from './ghost/types';
@@ -66,15 +73,15 @@ const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : 
  * 24-hour window (create=3, update=2, delete=1; measured from live 429
  * headers: `ratelimit-policy: 35000;w=86400`). Fixed means all-or-nothing:
  * a drained window stays at zero until one reset instant, then refills
- * entirely — so a large backfill WILL eventually see 429s, and recovery is
+ * entirely. A large backfill WILL eventually see 429s, and recovery is
  * never gradual. The 429's `ratelimit-reset` epoch header is honored,
  * clamped to [60s, 1h]: the reset can be many hours out, and rather than
- * trusting a far-future value we retry hourly — a wake-up against a
+ * trusting a far-future value we retry hourly: a wake-up against a
  * still-drained window costs ~3 points, so bounded polling is nearly free
  * and self-corrects the moment the window reopens. Non-429 failures get a
  * conservative 10 minutes.
  *
- * NOTE: this quota is account-wide — shared with the owner's own posting.
+ * NOTE: this quota is account-wide, shared with the owner's own posting.
  * That's why batches stop at the FIRST 429 instead of hammering on.
  */
 export function writeFailureDelay(err: unknown, nowMs: number): number {
@@ -184,20 +191,20 @@ export async function reconcileWindow(
 
 /**
  * Backfill / deep repair: create records for posts KV has never seen,
- * skipping already-synced posts by id alone (zero KV reads for them —
+ * skipping already-synced posts by id alone (zero KV reads for them;
  * content drift on synced posts is the windowed path's job), then orphan
  * deletion. Returns `capped: true` while more of the archive remains, which
  * is the queue consumer's signal to chain another batch.
  *
  * With `force`, known posts are NOT skipped: every record is rewritten in
  * place (same rkey) with a forced upsert. This is the migration tool for
- * changes that live outside the content hash — e.g. after the publication
+ * changes that live outside the content hash, e.g. after the publication
  * rkey changes, every document's `site` reference must be rewritten.
  *
  * Force mode MUST resume via `offset` (posts already handled by earlier
  * batches in this chain): unlike normal full mode, force has no
  * skip-known-ids to make progress inherent, so without the offset every
- * chained batch would rewrite the same first `maxWrites` posts forever —
+ * chained batch would rewrite the same first `maxWrites` posts forever,
  * burning the account's PDS write quota in a loop (this happened). A capped
  * force report carries `nextOffset` for the chain to pass back in.
  */
@@ -243,7 +250,7 @@ export async function reconcileFull(
       processed++;
     } catch (err) {
       recordFailure(report, err, `full upsert ${post.id}`);
-      // resume AT the failed post next batch — it hasn't been written
+      // resume AT the failed post next batch; it hasn't been written
       if (force) report.nextOffset = processed;
       break;
     }
@@ -259,7 +266,7 @@ export async function reconcileFull(
  * the inputs for the requested mode, builds the live SyncDeps (PDS session
  * with DID assertion), runs the pass, and logs the report.
  *
- * Throws if the publication record hasn't been set up yet — documents
+ * Throws if the publication record hasn't been set up yet, because documents
  * can't reference a publication that doesn't exist.
  */
 export async function reconcile(

@@ -1,13 +1,23 @@
 /**
- * Worker entry point: routes the three Cloudflare triggers to the modules
- * that do the work.
+ * Worker entry point. Start reading here.
  *
- *   fetch     — bridge routes (webhook receiver, well-known verification,
+ * The big picture: this Worker connects a Ghost blog to the AT Protocol
+ * network (the one behind Bluesky). Ghost tells us about posts via
+ * webhooks; we mirror each public post as a `site.standard.document`
+ * record in the blog owner's own data repo, and serve the verification
+ * endpoints that let apps trust those records. If terms like DID, PDS,
+ * record, or rkey are new to you, the README's two-minute crash course
+ * explains them all, and the code will make much more sense afterwards.
+ *
+ * Cloudflare invokes a Worker through named triggers; this file routes the
+ * three we use to the modules that do the work:
+ *
+ *   fetch:     bridge routes (webhook receiver, well-known verification,
  *               admin setup/reconcile) with everything else proxied to the
  *               Ghost origin via handleProxy
- *   queue     — consumes sync events (PDS writes with retry) and reconcile
+ *   queue:     consumes sync events (PDS writes with retry) and reconcile
  *               control messages (long backfills that self-chain)
- *   scheduled — the daily windowed reconcile (the safety net for Ghost's
+ *   scheduled: the daily windowed reconcile (the safety net for Ghost's
  *               fire-once webhooks)
  *
  * Route map (everything under /_atproto/ requires the admin bearer token
@@ -62,11 +72,11 @@ export default {
       const max = Number(url.searchParams.get('max'));
       const maxWrites = Number.isFinite(max) && max > 0 ? Math.min(max, 1000) : undefined;
 
-      // Full mode (archive backfill) runs for many minutes — far past what an
-      // HTTP request can hold open — so it runs in the queue consumer and
+      // Full mode (archive backfill) runs for many minutes, far past what an
+      // HTTP request can hold open, so it runs in the queue consumer and
       // re-enqueues itself until the archive is done. Poll with GET.
       if (url.searchParams.get('full') === '1') {
-        // &force=1 rewrites every record even if unchanged — the migration
+        // &force=1 rewrites every record even if unchanged: the migration
         // path after e.g. a publication rkey change.
         const force = url.searchParams.get('force') === '1';
         await env.EVENTS.send({ kind: 'reconcile', full: true, maxWrites, force });
@@ -96,7 +106,7 @@ export default {
    *
    * Reconcile commands run a full pass each; a capped pass re-enqueues the
    * same command (with a short delay) so the backfill chains itself to
-   * completion. Failures retry after 2 minutes — safe, because every pass
+   * completion. Failures retry after 2 minutes, which is safe because every pass
    * is idempotent.
    *
    * Sync events share one PDS session per batch. Each message acks or
@@ -123,7 +133,7 @@ export default {
         if (report.capped) {
           // More archive left: chain the next batch. After a write failure
           // (PDS rate limit etc.) the report carries the backoff to honor.
-          // Force chains resume at nextOffset — without it they'd rewrite
+          // Force chains resume at nextOffset; without it they'd rewrite
           // the same posts forever (see reconcileFull).
           await env.EVENTS.send(
             { ...message.body, offset: report.nextOffset ?? message.body.offset },
@@ -179,7 +189,7 @@ export default {
 
   /**
    * Daily cron: the windowed reconcile. Deliberately NOT the archive
-   * backfill — full sweeps only happen on explicit operator request. The
+   * backfill; full sweeps only happen on explicit operator request. The
    * report is stored for GET /_atproto/reconcile; failures are logged and
    * left for the next day's run (or a manual pass).
    */

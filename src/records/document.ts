@@ -2,13 +2,19 @@
  * Shaping Ghost posts into `site.standard.document` records, plus the
  * content hash that debounces Ghost's save-spam.
  *
+ * A "record" is the little JSON document that lives in the blog owner's
+ * AT Protocol repo; `site.standard.document` is the lexicon (shared
+ * schema) for "an article on a website". This file is where a Ghost post
+ * gets translated into that shape; nothing here talks to the network,
+ * which is what makes it easy to test field by field.
+ *
  * Content policy (deliberate): metadata + excerpt only. The canonical
- * content lives at the blog — records carry no post body, so the lexicon's
+ * content lives at the blog: records carry no post body, so the lexicon's
  * `content`/`textContent` fields are never set.
  *
  * URL model: the record stores `site` (the publication's AT-URI) and `path`.
  * Consumers resolve the publication, read its `url`, and join it with the
- * path to get the canonical URL — so paths here must exactly match what the
+ * path to get the canonical URL, so paths here must exactly match what the
  * proxy layer looks up in KV when injecting link tags. `normalizePath` is
  * that single shared normalization.
  *
@@ -18,7 +24,7 @@
  */
 import type { GhostPost } from '../ghost/types';
 
-/** site.standard.document — metadata + excerpt only; canonical content lives at the publication URL. */
+/** site.standard.document: metadata + excerpt only; canonical content lives at the publication URL. */
 export interface DocumentRecord {
   $type: 'site.standard.document';
   /** AT-URI of the publication record this document belongs to. */
@@ -52,7 +58,7 @@ export function normalizePath(pathname: string): string {
 
 /**
  * A post's canonical path: derived from Ghost's absolute post URL when
- * present (authoritative — it reflects routing config), falling back to the
+ * present (authoritative, since it reflects routing config), falling back to the
  * slug, then the id. Always normalized.
  */
 export function postPath(post: Pick<GhostPost, 'id' | 'url' | 'slug'>, ghostUrl: string): string {
@@ -71,7 +77,7 @@ function truncate(value: string, max: number): string {
   return value.length <= max ? value : value.slice(0, max);
 }
 
-/** Public tag names only — internal tags (visibility "internal") are Ghost bookkeeping, never syndicated. */
+/** Public tag names only; internal tags (visibility "internal") are Ghost bookkeeping, never syndicated. */
 function publicTags(post: GhostPost): string[] {
   return (post.tags ?? [])
     .filter((t) => (t.visibility ?? 'public') === 'public' && t.name)
@@ -84,7 +90,7 @@ function excerptOf(post: GhostPost): string {
 }
 
 /**
- * Build the document record for a post. Pure — given the same post,
+ * Build the document record for a post. Pure: given the same post,
  * publication URI, and (optional) cover-image blob, it always produces the
  * same record, which the record-shaping tests pin down field by field.
  */
@@ -114,7 +120,7 @@ export function shapeDocumentRecord(
 }
 
 /**
- * SHA-256 over the material fields only — the debounce against Ghost firing
+ * SHA-256 over the material fields only: the debounce against Ghost firing
  * post.published.edited on every save. `updated_at` is deliberately
  * excluded: it changes on every save whether or not anything the record
  * carries has changed. If this hash matches the stored one, the sync engine

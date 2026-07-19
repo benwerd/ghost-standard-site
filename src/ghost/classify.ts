@@ -1,9 +1,11 @@
 /**
- * Turns raw Ghost webhook payloads into sync events.
+ * Turns raw Ghost webhook payloads into sync events: the "what does this
+ * webhook actually mean for us?" step between receiving a delivery and
+ * doing any work.
  *
  * This is the single place where syndication policy lives: only public,
  * published, web-visible posts get `site.standard.document` records. Pages,
- * drafts, members-only posts, and email-only newsletters never do — and a
+ * drafts, members-only posts, and email-only newsletters never do. And a
  * published post that *loses* eligibility (unpublished, deleted, or edited
  * to a non-public visibility) produces a delete event so its record gets
  * cleaned up.
@@ -29,7 +31,7 @@ export function isSyndicatable(post: GhostPost): boolean {
  *
  * Prefers the top-level `event` field; falls back to payload shape for
  * older Ghost versions that omit it. Anything with a post id that isn't a
- * syndicatable upsert becomes a delete — which is safe because the sync
+ * syndicatable upsert becomes a delete, which is safe because the sync
  * engine treats deletes for unknown posts as a no-op.
  */
 export function classifyWebhook(body: GhostWebhookBody): SyncEvent | null {

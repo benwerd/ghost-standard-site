@@ -1,5 +1,7 @@
 /**
- * Minimal typings for the Ghost objects this Worker touches.
+ * Minimal typings for the Ghost objects this Worker touches. If you know
+ * Ghost, nothing here will surprise you; if you don't, the comments on
+ * each field tell you as much as this codebase needs you to know.
  *
  * These are deliberately partial: Ghost posts carry dozens of fields, but the
  * bridge only reads the metadata needed for record shaping, content hashing,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One-off migration helper: rewrite document records whose `site` still
 // references an OLD publication URI (e.g. the legacy /self rkey) to the
-// current one, directly from this machine — surgical, no full-archive
+// current one, directly from this machine: surgical, no full-archive
 // force reconcile needed.
 //
 //   node scripts/rewrite-site-refs.mjs            # dry run: list what would change
@@ -9,10 +9,10 @@
 //
 // The current publication URI is read from the live /.well-known endpoint
 // (the authoritative source). Only records whose `site` points at THIS
-// account's site.standard.publication collection are touched — foreign or
+// account's site.standard.publication collection are touched; foreign or
 // pre-bridge records with other `site` values are listed but left alone.
 // Writes are spaced 400ms apart; if the PDS returns 429 (rate limit), the
-// script stops and tells you when to re-run — already-rewritten records are
+// script stops and tells you when to re-run; already-rewritten records are
 // skipped on the next run, so re-running is always safe.
 
 import { AtpAgent } from '@atproto/api';
@@ -70,7 +70,7 @@ console.error(`${total} records total; ${stale.length} stale site refs to rewrit
 if (!apply) {
   for (const rec of stale.slice(0, 10)) console.error(`  would rewrite: ${rec.uri} (${rec.value.path ?? ''})`);
   if (stale.length > 10) console.error(`  … and ${stale.length - 10} more`);
-  console.error('Dry run — re-run with --apply to write.');
+  console.error('Dry run. Re-run with --apply to write.');
   process.exit(0);
 }
 
@@ -93,7 +93,7 @@ for (const rec of stale) {
     if (err?.status === 429) {
       const reset = Number(err?.headers?.['ratelimit-reset']);
       const when = Number.isFinite(reset) ? new Date(reset * 1000).toISOString() : 'later';
-      console.error(`Rate limited after ${done} rewrites. Re-run with --apply after ${when} — already-rewritten records are skipped automatically.`);
+      console.error(`Rate limited after ${done} rewrites. Re-run with --apply after ${when}; already-rewritten records are skipped automatically.`);
       process.exit(2);
     }
     throw err;

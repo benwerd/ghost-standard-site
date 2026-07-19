@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sends ONE signed Ghost-style webhook for ONE real post through the Worker —
+// Sends ONE signed Ghost-style webhook for ONE real post through the Worker:
 // the lightest end-to-end test. No Ghost webhook config, no cron, no backfill.
 //
 //   npm run test-post                                  # syndicate your most recent post, via local wrangler dev
@@ -82,7 +82,7 @@ const res = await fetch(target, {
 console.log(res.status, await res.text());
 if (res.status === 202) {
   console.error(
-    'Queued. The queue consumer processes it within seconds — check `wrangler tail` (prod) ' +
+    'Queued. The queue consumer processes it within seconds; check `wrangler tail` (prod) ' +
       'or the wrangler dev output (local) for the result.'
   );
 }

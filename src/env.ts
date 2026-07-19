@@ -1,5 +1,8 @@
 /**
  * Shared type definitions for the Worker's environment and its queue traffic.
+ * If you're new to the codebase, skim this file first: every message that
+ * moves through the system and every configuration value it needs is
+ * declared (and explained) here.
  *
  * The Worker moves two kinds of messages through its Cloudflare Queue:
  * post-level sync events (produced by the webhook receiver, consumed by the
@@ -47,7 +50,7 @@ export type QueueMessage = SyncEvent | ReconcileCommand;
 
 /**
  * The Worker's environment: bindings (KV, queue) plus configuration.
- * Secrets and vars are indistinguishable at runtime — all arrive as strings
+ * Secrets and vars are indistinguishable at runtime; all arrive as strings
  * on this object.
  */
 export interface Env {

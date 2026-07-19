@@ -1,12 +1,14 @@
 /**
- * GET /.well-known/site.standard.publication — the authoritative publication
- * verification endpoint defined by standard.site.
+ * GET /.well-known/site.standard.publication: the website's half of the
+ * verification handshake (the README crash course explains why both the
+ * site and the records must vouch for each other). This is the
+ * authoritative publication verification endpoint defined by standard.site.
  *
  * Verifiers (Bluesky's crawler, Atmosphere readers) resolve a publication
  * record's `url`, fetch this path on that domain, and compare the returned
  * AT-URI against the record they hold. A match proves the DID controls the
  * domain. The `<link rel="site.standard.publication">` tag the proxy injects
- * is only a discovery hint — this endpoint is what's trusted.
+ * is only a discovery hint; this endpoint is what's trusted.
  */
 import type { Env } from '../env';
 import { getPublicationUri } from '../state/kv';

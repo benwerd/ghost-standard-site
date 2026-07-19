@@ -1,7 +1,9 @@
 /**
- * Read-side client for the Ghost Content API, used by the reconcile sweep
- * and the publication setup route. (The webhook path never calls this —
- * webhook payloads already carry the post.)
+ * Read-side client for the Ghost Content API: Ghost's public, read-only
+ * API for published content (as opposed to the Admin API, which can change
+ * things and which this Worker deliberately never holds keys for). Used by
+ * the reconcile sweep and the publication setup route; the webhook path
+ * never calls this, since webhook payloads already carry the post.
  *
  * Design constraints baked in here:
  * - Lean fields only, never post HTML: reconcile enumerates the whole
@@ -16,10 +18,10 @@
 import type { Env } from '../env';
 import type { GhostPost, GhostSettings } from './types';
 
-/** Posts per Content API page — 100 is Ghost's maximum. */
+/** Posts per Content API page; 100 is Ghost's maximum. */
 const PAGE_SIZE = 100;
 
-// Everything the record shaper and content hash need — deliberately NOT the
+// Everything the record shaper and content hash need, deliberately NOT the
 // post html, which would mean downloading the whole archive's bodies on every
 // reconcile. (Verified on Ghost 6: `fields` and `include=tags` combine fine.)
 const LEAN_FIELDS =
@@ -28,7 +30,7 @@ const LEAN_FIELDS =
 /**
  * Walk every page of a posts query and return the concatenated results.
  * `params` are merged into each page request (filter, fields, include…).
- * The Content API omits `status`, so it's defaulted to 'published' — which
+ * The Content API omits `status`, so it's defaulted to 'published', which
  * is accurate, since the Content API never returns drafts.
  */
 async function fetchPaged(env: Env, params: Record<string, string>): Promise<GhostPost[]> {
@@ -60,7 +62,7 @@ export async function fetchAllPosts(env: Env): Promise<GhostPost[]> {
 }
 
 /**
- * Posts edited or published in the last `days` days — the windowed repair
+ * Posts edited or published in the last `days` days: the windowed repair
  * set. Keyed on `updated_at` (not `published_at`) so a dropped edit-webhook
  * on an old post is still repaired.
  */
@@ -77,7 +79,7 @@ export async function fetchPostsUpdatedSince(env: Env, days: number): Promise<Gh
 }
 
 /**
- * Every public post's id (~4KB per 100 posts) — cheap at any archive size.
+ * Every public post's id (~4KB per 100 posts), cheap at any archive size.
  * Drives orphan deletion, which can never be windowed: deleted posts simply
  * vanish from the API, so "what's missing" needs the full id set.
  */

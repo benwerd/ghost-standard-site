@@ -1,18 +1,21 @@
 /**
- * Shaping the site-level `site.standard.publication` record.
+ * Shaping the site-level `site.standard.publication` record: the single
+ * record that represents the blog itself ("this website exists, here's its
+ * name, icon, and URL"). Every per-post document record points back at it
+ * via its AT-URI, the way articles point at their masthead.
  *
  * There is exactly one publication record per blog (rkey `self`), created
  * and updated by the /_atproto/setup admin route from Ghost's site settings.
  * Its `url` field is the base every document's `path` is joined onto by
  * consumers, and it's what the /.well-known verification endpoint vouches
- * for — so it must be the canonical https origin with no trailing slash.
+ * for, so it must be the canonical https origin with no trailing slash.
  *
  * `showInDiscover: true` opts the publication into discovery feeds in
  * Atmosphere readers (Leaflet, pckt, Offprint, Heron…).
  */
 import type { GhostSettings } from '../ghost/types';
 
-/** site.standard.publication — the blog itself, referenced by every document's `site` field. */
+/** site.standard.publication: the blog itself, referenced by every document's `site` field. */
 export interface PublicationRecord {
   $type: 'site.standard.publication';
   /** Canonical base URL, no trailing slash; joined with document paths by consumers. */
