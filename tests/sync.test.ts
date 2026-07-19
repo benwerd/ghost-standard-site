@@ -1,3 +1,6 @@
+// The sync engine end-to-end minus the network: fake PdsWriter, real
+// (miniflare) KV. Covers idempotent create/update/skip/force/delete and the
+// slug-rename path move.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { processEvent, type PdsWriter } from '../src/sync';
@@ -6,7 +9,7 @@ import fixture from './fixtures/post-published.json';
 import type { GhostPost } from '../src/ghost/types';
 
 const post = fixture.post.current as GhostPost;
-const PUB_URI = 'at://did:plc:x/site.standard.publication/self';
+const PUB_URI = 'at://did:plc:x/site.standard.publication/3kizf2hc622ry';
 
 function fakeWriter() {
   const calls = { puts: [] as Array<{ rkey: string; record: any }>, deletes: [] as string[] };

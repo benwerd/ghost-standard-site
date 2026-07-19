@@ -1,3 +1,4 @@
+// Publication record shaping from Ghost settings and the admin bearer-token check.
 import { describe, it, expect } from 'vitest';
 import { shapePublicationRecord } from '../src/records/publication';
 import { isAuthorizedAdmin } from '../src/handlers/setup';

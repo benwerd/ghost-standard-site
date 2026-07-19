@@ -1,5 +1,12 @@
 # Ghost → standard.site Bridge Implementation Plan
 
+> **Historical document.** This plan was fully executed on 2026-07-13; the
+> system has since evolved beyond it (windowed reconcile, queue-based
+> backfill, TID publication rkey, env-only configuration, CI, and more).
+> For what actually shipped, read the README and the *Post-implementation
+> revisions* addendum in the design spec next to this file. Code snippets
+> below reflect the original implementation, not necessarily the current one.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A single Cloudflare Worker that syndicates werd.io (Ghost(Pro)) posts to `site.standard.document` records in `did:plc:77tdak46psveqneyegsdyc7l`, serves the standard.site verification loop, and never degrades the blog.

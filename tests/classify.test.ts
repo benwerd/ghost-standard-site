@@ -1,3 +1,5 @@
+// Webhook classification and the syndication policy: what becomes an upsert,
+// what becomes a delete, and what is ignored entirely.
 import { describe, it, expect } from 'vitest';
 import { classifyWebhook, isSyndicatable } from '../src/ghost/classify';
 import fixture from './fixtures/post-published.json';

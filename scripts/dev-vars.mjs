@@ -1,8 +1,17 @@
-// Shared .dev.vars reader for the deploy-time scripts.
+// Shared .dev.vars reader for the deploy-time scripts. .dev.vars is the
+// single source of truth for all configuration (see README); these scripts
+// read it directly rather than taking their own flags so values can never
+// drift between local dev, deploy config, and production secrets.
 import fs from 'node:fs';
 
+/** Where the runtime configuration lives (gitignored; copy from .dev.vars.example). */
 export const DEV_VARS = '.dev.vars';
 
+/**
+ * Parse .dev.vars into a key→value map, skipping comments and blank lines.
+ * Exits the process with guidance if the file doesn't exist yet, so every
+ * consuming script fails the same friendly way.
+ */
 export function readDevVars() {
   if (!fs.existsSync(DEV_VARS)) {
     console.error(`${DEV_VARS} not found. Run: cp .dev.vars.example ${DEV_VARS} and fill it in.`);

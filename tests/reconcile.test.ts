@@ -1,3 +1,6 @@
+// Both reconcile modes with a fake PdsWriter: windowed repair (upserts +
+// visibility flips + orphan deletion) and the full backfill (skip-known-ids,
+// write cap / capped flag, idempotent reruns).
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { reconcileWindow, reconcileFull } from '../src/reconcile';
@@ -7,7 +10,7 @@ import fixture from './fixtures/post-published.json';
 import type { GhostPost } from '../src/ghost/types';
 
 const post = fixture.post.current as GhostPost;
-const PUB_URI = 'at://did:plc:x/site.standard.publication/self';
+const PUB_URI = 'at://did:plc:x/site.standard.publication/3kizf2hc622ry';
 
 function fakeWriter() {
   const calls = { puts: [] as string[], deletes: [] as string[] };

@@ -1,3 +1,5 @@
+// KV state helpers against the real (miniflare) STATE binding: both-direction
+// post/path mappings, slug-rename cleanup, publication URI, reconcile report.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import {
@@ -58,7 +60,7 @@ describe('reconcile report', () => {
 describe('publication', () => {
   it('round-trips the publication AT-URI', async () => {
     expect(await getPublicationUri(env.STATE)).toBeNull();
-    await setPublicationUri(env.STATE, 'at://did:plc:x/site.standard.publication/self');
-    expect(await getPublicationUri(env.STATE)).toBe('at://did:plc:x/site.standard.publication/self');
+    await setPublicationUri(env.STATE, 'at://did:plc:x/site.standard.publication/3kizf2hc622ry');
+    expect(await getPublicationUri(env.STATE)).toBe('at://did:plc:x/site.standard.publication/3kizf2hc622ry');
   });
 });
