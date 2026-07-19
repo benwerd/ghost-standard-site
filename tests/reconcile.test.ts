@@ -3,7 +3,7 @@
 // write cap / capped flag, idempotent reruns).
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
-import { reconcileWindow, reconcileFull } from '../src/reconcile';
+import { reconcileWindow, reconcileFull, writeFailureDelay } from '../src/reconcile';
 import { processEvent, type PdsWriter } from '../src/sync';
 import { getPostState } from '../src/state/kv';
 import fixture from './fixtures/post-published.json';
@@ -38,6 +38,20 @@ const OPTS = { maxWrites: 100, sleepMs: 0 };
 beforeEach(async () => {
   const all = await env.STATE.list();
   await Promise.all(all.keys.map((k) => env.STATE.delete(k.name)));
+});
+
+describe('writeFailureDelay', () => {
+  const NOW = 1_800_000_000_000;
+  it('honors ratelimit-reset on 429s, clamped to [60s, 1h]', () => {
+    const at = (s: number) => ({ status: 429, headers: { 'ratelimit-reset': String(NOW / 1000 + s) } });
+    expect(writeFailureDelay(at(900), NOW)).toBe(900);
+    expect(writeFailureDelay(at(5), NOW)).toBe(60);
+    expect(writeFailureDelay(at(90_000), NOW)).toBe(3600);
+  });
+  it('defaults to 10 minutes for unknown failures', () => {
+    expect(writeFailureDelay(new Error('boom'), NOW)).toBe(600);
+    expect(writeFailureDelay({ status: 429 }, NOW)).toBe(600);
+  });
 });
 
 describe('reconcileWindow', () => {
@@ -106,6 +120,23 @@ describe('reconcileFull', () => {
     const report = await reconcileFull(many, deps(writer), OPTS, true);
     expect(report).toMatchObject({ created: 0, updated: 3, skipped: 0 });
     expect(calls.puts).toEqual(firstRkeys); // same records, same rkeys, rewritten
+  });
+  it('stops gracefully on a write failure: partial progress kept, capped, retry delay set', async () => {
+    const { writer, calls } = fakeWriter();
+    let puts = 0;
+    writer.putDocument = async (rkey) => {
+      if (++puts > 1) {
+        throw { status: 429, headers: { 'ratelimit-reset': String(Math.floor(Date.now() / 1000) + 900) } };
+      }
+      calls.puts.push(rkey);
+      return { uri: `at://did:plc:x/site.standard.document/${rkey}` };
+    };
+    const report = await reconcileFull(many, deps(writer), OPTS);
+    expect(report.created).toBe(1); // first write landed and is recorded
+    expect(report.errors).toBe(1);
+    expect(report.capped).toBe(true); // chain continues later…
+    expect(report.retryAfterS).toBeGreaterThan(800); // …when the rate window resets
+    expect(await getPostState(env.STATE, post.id)).not.toBeNull();
   });
   it('deletes orphans no longer present in Ghost', async () => {
     const { writer } = fakeWriter();
