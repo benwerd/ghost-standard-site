@@ -1,9 +1,9 @@
 /**
- * Verification of Ghost's webhook signatures — how we know a request to the
+ * Verification of Ghost's webhook signatures: how we know a request to the
  * webhook endpoint really came from Ghost and not from anyone on the
  * internet who found the URL.
  *
- * Ghost signs each webhook delivery — but ONLY when the webhook was created
+ * Ghost signs each webhook delivery, but ONLY when the webhook was created
  * with a secret, which the Admin UI cannot do (hence scripts/create-webhooks.mjs).
  * The header format, confirmed against Ghost core's webhook-trigger.js:
  *
@@ -28,7 +28,7 @@ export interface ParsedSignature {
 }
 
 /**
- * Parse an X-Ghost-Signature header (`sha256=<hex>, t=<ms>` — see Ghost
+ * Parse an X-Ghost-Signature header (`sha256=<hex>, t=<ms>`; see Ghost
  * core webhook-trigger.js). Returns null for anything malformed.
  */
 export function parseSignatureHeader(header: string): ParsedSignature | null {
@@ -38,7 +38,7 @@ export function parseSignatureHeader(header: string): ParsedSignature | null {
 }
 
 /**
- * Constant-time string comparison — the loop always runs to the end of the
+ * Constant-time string comparison: the loop always runs to the end of the
  * string so equality checks don't leak how many leading characters matched.
  * Used for signature digests and the admin bearer token.
  */

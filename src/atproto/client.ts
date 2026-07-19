@@ -1,7 +1,7 @@
 /**
  * The Worker's connection to the AT Protocol network.
  *
- * All writes go to the blog owner's PDS — the server that hosts their
+ * All writes go to the blog owner's PDS, the server that hosts their
  * personal data repo (README crash course has the fuller picture). We log
  * in with their handle + an app password, exactly like a mobile client
  * would, and then create/update/delete records in their repo.
@@ -14,7 +14,7 @@
  *   with a fake and never touches the network in tests.
  *
  * Every record write uses `validate: false` because the PDS does not host
- * the site.standard lexicons — server-side schema validation would reject
+ * the site.standard lexicons, so server-side schema validation would reject
  * the records otherwise.
  */
 import { AtpAgent } from '@atproto/api';
@@ -26,7 +26,7 @@ export const DOCUMENT_COLLECTION = 'site.standard.document';
 /** Collection NSID for the site-level publication record. */
 export const PUBLICATION_COLLECTION = 'site.standard.publication';
 // (The publication's rkey is not a constant: the lexicon requires `key: tid`,
-// so it's minted at first setup — see choosePublicationRkey in atproto/tid.ts.)
+// so it's minted at first setup; see choosePublicationRkey in atproto/tid.ts.)
 
 /** Lexicon constraint: coverImage/icon blobs must be under 1MB. */
 const MAX_BLOB_BYTES = 1_000_000;
@@ -47,7 +47,7 @@ export function assertSessionDid(sessionDid: string | undefined, expected: strin
 /**
  * Log in to the PDS with handle + app password and return an authenticated
  * agent, after the DID assertion passes. Called per invocation (queue batch,
- * setup, reconcile) — app-password sessions are cheap to create.
+ * setup, reconcile); app-password sessions are cheap to create.
  */
 export async function createSession(env: Env): Promise<AtpAgent> {
   const agent = new AtpAgent({ service: env.ATPROTO_PDS_URL });
@@ -58,8 +58,8 @@ export async function createSession(env: Env): Promise<AtpAgent> {
 
 /**
  * Fetch an image URL and upload it as a blob, returning the BlobRef to embed
- * in a record. Returns undefined on any failure — missing image, non-2xx,
- * empty body, or over the 1MB lexicon cap — because a cover image is never
+ * in a record. Returns undefined on any failure (missing image, non-2xx,
+ * empty body, or over the 1MB lexicon cap), because a cover image is never
  * worth failing a record write over (fail open).
  */
 export async function uploadImageFromUrl(agent: AtpAgent, url: string): Promise<unknown | undefined> {
@@ -108,7 +108,7 @@ export function createPdsWriter(agent: AtpAgent, env: Env): PdsWriter {
         if (status !== 400 && status !== 404) throw err; // already gone is fine
       }
     },
-    /** See uploadImageFromUrl — undefined on any failure, never throws. */
+    /** See uploadImageFromUrl: undefined on any failure, never throws. */
     async fetchImageBlob(url) {
       return uploadImageFromUrl(agent, url);
     },

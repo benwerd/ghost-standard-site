@@ -1,15 +1,15 @@
 /**
- * The Worker's state layer — everything the bridge remembers.
+ * The Worker's state layer: everything the bridge remembers.
  *
  * Cloudflare KV is a simple key→value store. We use one namespace to
  * remember which Ghost post maps to which AT Protocol record (and back
  * again by URL path, since the page proxy only knows the path of the page
- * it's serving). Lose this data and nothing breaks permanently — a full
- * reconcile rebuilds it — but the mappings are what make everyday
+ * it's serving). Lose this data and nothing breaks permanently (a full
+ * reconcile rebuilds it), but the mappings are what make everyday
  * operations fast and idempotent. Keys, in both directions:
  *
  *   post:{ghost_post_id} → PostState (rkey, AT-URI, content hash, path)
- *   path:{url_path}      → { atUri }  (the HTMLRewriter lookup — the proxy
+ *   path:{url_path}      → { atUri }  (the HTMLRewriter lookup; the proxy
  *                          only knows the request path, not the post id)
  *   publication          → { atUri }  (the site-level record's AT-URI)
  *   reconcile:last       → StoredReconcileReport (latest sweep, any mode)
@@ -36,7 +36,7 @@ export interface PostState {
   rkey: string;
   /** Full AT-URI of the document record. */
   atUri: string;
-  /** contentHash() of the material fields at last write — the edit debounce. */
+  /** contentHash() of the material fields at last write; the edit debounce. */
   contentHash: string;
   /** Normalized path at last write; used to clean up the path: key on renames. */
   path: string;
@@ -51,7 +51,7 @@ export async function getPostState(kv: KVNamespace, postId: string): Promise<Pos
 
 /**
  * Write both mappings for a post (id → state, path → AT-URI). When the path
- * changed — a slug rename — the stale path: key is deleted so the old URL
+ * changed (a slug rename), the stale path: key is deleted so the old URL
  * stops advertising a link tag.
  */
 export async function putPostState(
@@ -115,7 +115,7 @@ export async function getLastReconcileReport(kv: KVNamespace): Promise<StoredRec
   return kv.get<StoredReconcileReport>(RECONCILE_REPORT_KEY, 'json');
 }
 
-/** The publication record's AT-URI — what /.well-known serves and documents reference. Null before setup. */
+/** The publication record's AT-URI: what /.well-known serves and documents reference. Null before setup. */
 export async function getPublicationUri(kv: KVNamespace): Promise<string | null> {
   const entry = await kv.get<{ atUri: string }>(PUBLICATION_KEY, 'json');
   return entry?.atUri ?? null;

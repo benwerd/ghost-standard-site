@@ -8,21 +8,21 @@
 # The Worker's route/zone and the publication record's url derive from this.
 GHOST_URL=https://yourblog.example.com
 
-# YOU INVENT THIS — generate with:  openssl rand -hex 32
+# YOU INVENT THIS. Generate with:  openssl rand -hex 32
 # Registered with Ghost by scripts/create-webhooks.mjs (Ghost signs webhooks
 # with it), verified by the Worker, and doubles as the admin bearer token.
 GHOST_WEBHOOK_SECRET=replace-with-a-long-random-string
 
 # Ghost Admin → Settings → Advanced → Integrations → Add custom integration
 # → copy the CONTENT API key (26 hex chars). (The Admin API key from the same
-# page is NOT stored here — it's passed as GHOST_ADMIN_API_KEY on the shell
+# page is NOT stored here; it's passed as GHOST_ADMIN_API_KEY on the shell
 # when running scripts/create-webhooks.mjs.)
 GHOST_CONTENT_API_KEY=replace-me
 
 # Your Bluesky/atproto handle without the leading @ (as shown on your profile).
 ATPROTO_HANDLE=your-handle.example.com
 
-# Resolve from your handle — don't type from memory:
+# Resolve from your handle (don't type from memory):
 #   curl "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=YOUR_HANDLE"
 # Copy the did:plc:… (or did:web:…) value. The Worker refuses to write if its
 # session resolves to any other DID.
@@ -45,5 +45,5 @@ ATPROTO_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 
 # From:  npx wrangler kv namespace create STATE
 # Copy the 32-hex "id" from the printed snippet. Deploy-time only, consumed
-# by scripts/configure.mjs — never pushed to the Worker.
+# by scripts/configure.mjs, never pushed to the Worker.
 KV_NAMESPACE_ID=

@@ -1,4 +1,4 @@
-// Template — scripts/configure.mjs renders this to wrangler.jsonc (gitignored),
+// Template: scripts/configure.mjs renders this to wrangler.jsonc (gitignored),
 // filling {{DOMAIN}} from GHOST_URL and {{KV_NAMESPACE_ID}} from .dev.vars.
 {
   "$schema": "node_modules/wrangler/config-schema.json",

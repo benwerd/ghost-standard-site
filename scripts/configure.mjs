@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generates wrangler.jsonc (gitignored) from wrangler.example.jsonc.
 //
-// The route pattern and zone name are derived from GHOST_URL in .dev.vars —
+// The route pattern and zone name are derived from GHOST_URL in .dev.vars;
 // the Worker must front the same domain the blog lives on, so there is no
 // separate "domain" setting to keep in sync. KV_NAMESPACE_ID comes from
 // .dev.vars too. Runs automatically before `npm run dev` and `npm run deploy`.
@@ -30,7 +30,7 @@ try {
 const kvId = vars.KV_NAMESPACE_ID ?? '';
 if (!kvId) {
   console.warn(
-    'KV_NAMESPACE_ID missing from .dev.vars — leaving the placeholder. ' +
+    'KV_NAMESPACE_ID missing from .dev.vars; leaving the placeholder. ' +
       'Create one with `npx wrangler kv namespace create STATE`, add the id, and re-run. ' +
       '(Fine for local dev; deploy will fail until set.)'
   );
@@ -42,10 +42,10 @@ let rendered = fs
   .replaceAll('{{KV_NAMESPACE_ID}}', kvId || '{{KV_NAMESPACE_ID}}')
   .replace(
     /^\/\/ Template[^\n]*\n\/\/[^\n]*\n/,
-    `// GENERATED from ${TEMPLATE} by scripts/configure.mjs — do not edit directly.\n`
+    `// GENERATED from ${TEMPLATE} by scripts/configure.mjs; do not edit directly.\n`
   );
 
-// NO_CRON=1 deploys without the daily reconcile cron — for testing a single
+// NO_CRON=1 deploys without the daily reconcile cron, for testing a single
 // post before opting into the archive backfill the cron would kick off.
 if (process.env.NO_CRON) {
   rendered = rendered.replace(/"crons":\s*\[[^\]]*\]/, '"crons": []');

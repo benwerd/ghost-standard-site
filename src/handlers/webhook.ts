@@ -1,5 +1,5 @@
 /**
- * POST /_atproto/ghost-webhook — the front door. When you hit Publish in
+ * POST /_atproto/ghost-webhook: the front door. When you hit Publish in
  * Ghost, Ghost calls this URL; everything the bridge does starts here.
  *
  * Responsibilities are deliberately minimal so the response is fast (Ghost
@@ -21,7 +21,7 @@ import type { GhostWebhookBody } from '../ghost/types';
 
 /**
  * Verify, classify, and enqueue one webhook delivery. The signature is
- * checked against the raw body text before any JSON parsing — the HMAC is
+ * checked against the raw body text before any JSON parsing, because the HMAC is
  * over the exact bytes Ghost sent.
  *
  * `?force=1` (signature still required) bypasses the content-hash debounce

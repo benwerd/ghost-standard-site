@@ -1,8 +1,8 @@
 /**
- * The sync engine — the heart of the bridge.
+ * The sync engine, the heart of the bridge.
  *
  * "Sync" here means: given one piece of news about a Ghost post ("it was
- * published/edited" or "it's gone"), make the AT Protocol side match — by
+ * published/edited" or "it's gone"), make the AT Protocol side match: by
  * creating, updating, or deleting the post's record on the owner's PDS
  * (their personal data server; see the README crash course) and keeping our
  * KV bookkeeping in step. This is the ONE place that logic lives: both the
@@ -40,10 +40,10 @@ export interface SyncDeps {
 
 /**
  * What processEvent did:
- * - created/updated — a record was written (first time / in place)
- * - skipped — upsert whose material fields were unchanged (debounce)
- * - deleted — record and state removed
- * - noop — delete for a post that was never synced
+ * - created/updated: a record was written (first time / in place)
+ * - skipped: upsert whose material fields were unchanged (debounce)
+ * - deleted: record and state removed
+ * - noop: delete for a post that was never synced
  */
 export type SyncResult = 'created' | 'updated' | 'skipped' | 'deleted' | 'noop';
 
@@ -55,7 +55,7 @@ export type SyncResult = 'created' | 'updated' | 'skipped' | 'deleted' | 'noop';
  *   deterministic rkey when one doesn't, so no path ever duplicates a record.
  * - Upserts whose content hash matches the stored hash return 'skipped'
  *   without touching the PDS (Ghost fires post.published.edited on every
- *   save) — unless the event carries `force`, the signed test path's
+ *   save), unless the event carries `force`, the signed test path's
  *   regenerate-on-rerun escape hatch.
  *
  * On a slug rename, the record keeps its rkey, gets a new `path`, and the

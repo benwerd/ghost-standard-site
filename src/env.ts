@@ -50,7 +50,7 @@ export type QueueMessage = SyncEvent | ReconcileCommand;
 
 /**
  * The Worker's environment: bindings (KV, queue) plus configuration.
- * Secrets and vars are indistinguishable at runtime — all arrive as strings
+ * Secrets and vars are indistinguishable at runtime; all arrive as strings
  * on this object.
  */
 export interface Env {

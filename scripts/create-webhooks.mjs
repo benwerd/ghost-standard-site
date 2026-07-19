@@ -8,7 +8,7 @@
 //
 //   <ADMIN-URL>  where Ghost Admin lives. On Ghost(Pro) this is your *.ghost.io
 //                admin domain (the one in your browser's address bar when logged
-//                into Ghost Admin, e.g. https://your-site.ghost.io) — the Admin
+//                into Ghost Admin, e.g. https://your-site.ghost.io); the Admin
 //                API is NOT served on your custom domain, it 302s there, and a
 //                redirected POST turns into a bodyless GET and fails with 404.
 //                Self-hosted: same as your site URL.
