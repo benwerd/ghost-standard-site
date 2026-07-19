@@ -120,14 +120,25 @@ export default {
         });
         await setLastReconcileReport(env.STATE, report);
         if (report.capped) {
-          // more archive left: chain the next batch
-          await env.EVENTS.send(message.body, { delaySeconds: 5 });
+          // More archive left: chain the next batch. After a write failure
+          // (PDS rate limit etc.) the report carries the backoff to honor.
+          await env.EVENTS.send(message.body, { delaySeconds: report.retryAfterS ?? 5 });
         }
         console.log('reconcile batch done', JSON.stringify(report));
         message.ack();
       } catch (err) {
+        // Setup-phase failure (Ghost API, PDS login…). Never let max_retries
+        // silently kill the chain: near the retry ceiling, re-enqueue a
+        // fresh copy (resets the attempt counter) and ack this one. Safe
+        // because every pass is idempotent; visible via logs and the report.
         console.error('reconcile batch failed', err);
-        message.retry({ delaySeconds: 120 });
+        if (message.attempts >= 4) {
+          console.error('reconcile batch near retry limit; re-enqueueing a fresh chain link in 10min');
+          await env.EVENTS.send(message.body, { delaySeconds: 600 });
+          message.ack();
+        } else {
+          message.retry({ delaySeconds: 120 });
+        }
       }
     }
 

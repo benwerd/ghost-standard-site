@@ -242,6 +242,14 @@ the archive backfill.
    curl "https://yourdomain.com/_atproto/reconcile" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
    The backfill is finished when that report shows `"capped": false`.
+   **It paces itself against PDS write quotas**: Bluesky-hosted PDSes allow
+   ~5,000 write-points/hour (a create costs 3), so batches that hit a 429
+   stop early, record `errors`/`retryAfterS` in the report, and the chain
+   resumes when the quota window reopens. A multi-thousand-post archive
+   therefore takes **hours, mostly waiting** — that's correct behavior, not
+   a stall. A stalled chain looks like: no new report from GET for over an
+   hour *and* `wrangler tail` silent; re-POSTing the same command is always
+   safe (idempotent).
    A plain `POST` without `?full=1` runs the windowed repair (same as the
    daily cron: posts updated in the last 3 days, plus orphan cleanup)
    synchronously and returns its report directly.

@@ -35,8 +35,12 @@ export interface ReconcileReport {
   updated: number;
   skipped: number;
   deleted: number;
-  /** true = the write cap ended the pass early; more work remains. */
+  /** true = the write cap or a write failure ended the pass early; more work remains. */
   capped: boolean;
+  /** Write failures encountered (the pass stops at the first one). */
+  errors: number;
+  /** When errors occurred: seconds the chain should wait before the next batch. */
+  retryAfterS?: number;
 }
 
 /** Knobs shared by both modes. */
@@ -52,6 +56,39 @@ export const WINDOW_DAYS = 3;
 
 /** Resolve after `ms` (skipped entirely when 0, so tests run instantly). */
 const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+/**
+ * How long the chain should back off after a write failure, in seconds.
+ *
+ * Bluesky-hosted PDSes enforce write quotas (~5,000 points/hour; a create
+ * costs 3, an update 2), so a large backfill batch WILL eventually see 429s.
+ * Those carry a `ratelimit-reset` epoch header — honor it (clamped to
+ * [60s, 1h]) so the chain resumes exactly when the window reopens. Anything
+ * else gets a conservative 10 minutes.
+ */
+export function writeFailureDelay(err: unknown, nowMs: number): number {
+  const e = err as { status?: number; headers?: Record<string, string> };
+  if (e?.status === 429) {
+    const reset = Number(e.headers?.['ratelimit-reset']);
+    if (Number.isFinite(reset)) {
+      return Math.min(Math.max(Math.ceil(reset - nowMs / 1000), 60), 3600);
+    }
+  }
+  return 600;
+}
+
+/**
+ * Record a write failure on the report and mark the pass as unfinished.
+ * The pass stops at the first failure rather than hammering a rate-limited
+ * PDS: everything written so far is safely recorded (idempotent), and the
+ * chained next batch picks up from current state after the backoff.
+ */
+function recordFailure(report: ReconcileReport, err: unknown, context: string): void {
+  report.errors++;
+  report.capped = true;
+  report.retryAfterS = writeFailureDelay(err, Date.now());
+  console.error(`reconcile write failed (${context}); pausing batch for ${report.retryAfterS}s`, err);
+}
 
 /** Mutable write counter shared between a pass's upsert loop and its orphan sweep. */
 interface WriteBudget {
@@ -75,10 +112,15 @@ async function deleteOrphans(
       report.capped = true;
       break;
     }
-    if ((await processEvent({ kind: 'delete', postId: id }, deps)) === 'deleted') {
-      report.deleted++;
-      budget.writes++;
-      await sleep(opts.sleepMs);
+    try {
+      if ((await processEvent({ kind: 'delete', postId: id }, deps)) === 'deleted') {
+        report.deleted++;
+        budget.writes++;
+        await sleep(opts.sleepMs);
+      }
+    } catch (err) {
+      recordFailure(report, err, `delete ${id}`);
+      break;
     }
   }
 }
@@ -95,7 +137,9 @@ export async function reconcileWindow(
   deps: SyncDeps,
   opts: ReconcileOptions
 ): Promise<ReconcileReport> {
-  const report: ReconcileReport = { mode: 'window', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false };
+  const report: ReconcileReport = {
+    mode: 'window', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false, errors: 0,
+  };
   const budget: WriteBudget = { writes: 0 };
 
   for (const post of recentPosts) {
@@ -103,22 +147,27 @@ export async function reconcileWindow(
       report.capped = true;
       break;
     }
-    // A post edited to non-public inside the window gets its record removed.
-    const result = isSyndicatable(post)
-      ? await processEvent({ kind: 'upsert', post }, deps)
-      : await processEvent({ kind: 'delete', postId: post.id }, deps);
-    if (result === 'skipped' || result === 'noop') {
-      report.skipped++;
-    } else {
-      if (result === 'created') report.created++;
-      else if (result === 'updated') report.updated++;
-      else report.deleted++;
-      budget.writes++;
-      await sleep(opts.sleepMs);
+    try {
+      // A post edited to non-public inside the window gets its record removed.
+      const result = isSyndicatable(post)
+        ? await processEvent({ kind: 'upsert', post }, deps)
+        : await processEvent({ kind: 'delete', postId: post.id }, deps);
+      if (result === 'skipped' || result === 'noop') {
+        report.skipped++;
+      } else {
+        if (result === 'created') report.created++;
+        else if (result === 'updated') report.updated++;
+        else report.deleted++;
+        budget.writes++;
+        await sleep(opts.sleepMs);
+      }
+    } catch (err) {
+      recordFailure(report, err, `window upsert ${post.id}`);
+      break;
     }
   }
 
-  await deleteOrphans(allPublicIds, deps, opts, report, budget);
+  if (report.errors === 0) await deleteOrphans(allPublicIds, deps, opts, report, budget);
   return report;
 }
 
@@ -140,7 +189,9 @@ export async function reconcileFull(
   opts: ReconcileOptions,
   force = false
 ): Promise<ReconcileReport> {
-  const report: ReconcileReport = { mode: 'full', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false };
+  const report: ReconcileReport = {
+    mode: 'full', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false, errors: 0,
+  };
   const budget: WriteBudget = { writes: 0 };
   const known = new Set(await listPostIds(deps.kv));
   const posts = allPosts.filter(isSyndicatable);
@@ -154,18 +205,23 @@ export async function reconcileFull(
       report.capped = true;
       break;
     }
-    const result = await processEvent({ kind: 'upsert', post, force }, deps);
-    if (result === 'skipped') {
-      report.skipped++;
-    } else {
-      if (result === 'created') report.created++;
-      else if (result === 'updated') report.updated++;
-      budget.writes++;
-      await sleep(opts.sleepMs);
+    try {
+      const result = await processEvent({ kind: 'upsert', post, force }, deps);
+      if (result === 'skipped') {
+        report.skipped++;
+      } else {
+        if (result === 'created') report.created++;
+        else if (result === 'updated') report.updated++;
+        budget.writes++;
+        await sleep(opts.sleepMs);
+      }
+    } catch (err) {
+      recordFailure(report, err, `full upsert ${post.id}`);
+      break;
     }
   }
 
-  await deleteOrphans(new Set(posts.map((p) => p.id)), deps, opts, report, budget);
+  if (report.errors === 0) await deleteOrphans(new Set(posts.map((p) => p.id)), deps, opts, report, budget);
   return report;
 }
 
