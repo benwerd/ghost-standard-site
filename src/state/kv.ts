@@ -9,8 +9,9 @@
  *
  * KV is eventually consistent (~60s propagation), which is an accepted
  * tradeoff: a link tag appearing up to a minute after publish is fine. If
- * that ever stops being acceptable, the flagged alternative is D1 — see the
- * design doc; don't work around it silently.
+ * that ever stops being acceptable, the deliberate alternative is a D1
+ * migration (see the README's operational notes); don't work around it
+ * silently.
  *
  * Paths stored here are always in `normalizePath` form (leading slash, no
  * trailing slash), matching what the record shaper writes and the proxy
