@@ -38,6 +38,8 @@ export interface ReconcileCommand {
   maxWrites?: number;
   /** Full mode only: rewrite every record even when unchanged (e.g. after a publication rkey migration). */
   force?: boolean;
+  /** Force chains only: resume index from the previous batch's report.nextOffset. */
+  offset?: number;
 }
 
 /** Everything that can travel through the EVENTS queue. */

@@ -121,6 +121,32 @@ describe('reconcileFull', () => {
     expect(report).toMatchObject({ created: 0, updated: 3, skipped: 0 });
     expect(calls.puts).toEqual(firstRkeys); // same records, same rkeys, rewritten
   });
+  it('force resumes from an offset so chained batches advance instead of looping', async () => {
+    const { writer, calls } = fakeWriter();
+    await reconcileFull(many, deps(writer), OPTS); // seed all three public posts
+    calls.puts.length = 0;
+
+    // batch 1: cap after 2 forced writes → nextOffset tells the chain where to resume
+    const first = await reconcileFull(many, deps(writer), { maxWrites: 2, sleepMs: 0 }, true, 0);
+    expect(first).toMatchObject({ updated: 2, capped: true, nextOffset: 2 });
+
+    // batch 2 resumes at the offset: finishes the third post, no re-writing of the first two
+    const second = await reconcileFull(many, deps(writer), { maxWrites: 2, sleepMs: 0 }, true, first.nextOffset);
+    expect(second.updated).toBe(1);
+    expect(second.capped).toBe(false);
+    expect(calls.puts).toHaveLength(3); // each record written exactly once across both batches
+  });
+  it('force write failure sets nextOffset to retry the failed post, not restart', async () => {
+    const { writer } = fakeWriter();
+    await reconcileFull(many, deps(writer), OPTS);
+    let puts = 0;
+    writer.putDocument = async (rkey) => {
+      if (++puts > 1) throw new Error('boom');
+      return { uri: `at://did:plc:x/site.standard.document/${rkey}` };
+    };
+    const report = await reconcileFull(many, deps(writer), OPTS, true, 0);
+    expect(report).toMatchObject({ updated: 1, errors: 1, capped: true, nextOffset: 1 });
+  });
   it('stops gracefully on a write failure: partial progress kept, capped, retry delay set', async () => {
     const { writer, calls } = fakeWriter();
     let puts = 0;
