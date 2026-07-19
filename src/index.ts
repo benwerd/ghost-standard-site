@@ -117,12 +117,18 @@ export default {
           full: message.body.full,
           maxWrites: message.body.maxWrites,
           force: message.body.force,
+          offset: message.body.offset,
         });
         await setLastReconcileReport(env.STATE, report);
         if (report.capped) {
           // More archive left: chain the next batch. After a write failure
           // (PDS rate limit etc.) the report carries the backoff to honor.
-          await env.EVENTS.send(message.body, { delaySeconds: report.retryAfterS ?? 5 });
+          // Force chains resume at nextOffset — without it they'd rewrite
+          // the same posts forever (see reconcileFull).
+          await env.EVENTS.send(
+            { ...message.body, offset: report.nextOffset ?? message.body.offset },
+            { delaySeconds: report.retryAfterS ?? 5 }
+          );
         }
         console.log('reconcile batch done', JSON.stringify(report));
         message.ack();

@@ -41,6 +41,8 @@ export interface ReconcileReport {
   errors: number;
   /** When errors occurred: seconds the chain should wait before the next batch. */
   retryAfterS?: number;
+  /** Force mode only: where the next chained batch must resume (posts index). */
+  nextOffset?: number;
 }
 
 /** Knobs shared by both modes. */
@@ -182,12 +184,20 @@ export async function reconcileWindow(
  * place (same rkey) with a forced upsert. This is the migration tool for
  * changes that live outside the content hash — e.g. after the publication
  * rkey changes, every document's `site` reference must be rewritten.
+ *
+ * Force mode MUST resume via `offset` (posts already handled by earlier
+ * batches in this chain): unlike normal full mode, force has no
+ * skip-known-ids to make progress inherent, so without the offset every
+ * chained batch would rewrite the same first `maxWrites` posts forever —
+ * burning the account's PDS write quota in a loop (this happened). A capped
+ * force report carries `nextOffset` for the chain to pass back in.
  */
 export async function reconcileFull(
   allPosts: GhostPost[],
   deps: SyncDeps,
   opts: ReconcileOptions,
-  force = false
+  force = false,
+  offset = 0
 ): Promise<ReconcileReport> {
   const report: ReconcileReport = {
     mode: 'full', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false, errors: 0,
@@ -195,14 +205,20 @@ export async function reconcileFull(
   const budget: WriteBudget = { writes: 0 };
   const known = new Set(await listPostIds(deps.kv));
   const posts = allPosts.filter(isSyndicatable);
+  // Only force mode consumes the offset; normal mode's skip-known already
+  // guarantees forward progress across batches.
+  const startAt = force ? Math.min(offset, posts.length) : 0;
+  let processed = startAt;
 
-  for (const post of posts) {
+  for (const post of posts.slice(startAt)) {
     if (!force && known.has(post.id)) {
       report.skipped++;
+      processed++;
       continue;
     }
     if (budget.writes >= opts.maxWrites) {
       report.capped = true;
+      if (force) report.nextOffset = processed;
       break;
     }
     try {
@@ -215,8 +231,11 @@ export async function reconcileFull(
         budget.writes++;
         await sleep(opts.sleepMs);
       }
+      processed++;
     } catch (err) {
       recordFailure(report, err, `full upsert ${post.id}`);
+      // resume AT the failed post next batch — it hasn't been written
+      if (force) report.nextOffset = processed;
       break;
     }
   }
@@ -236,7 +255,7 @@ export async function reconcileFull(
  */
 export async function reconcile(
   env: Env,
-  opts: { full?: boolean; maxWrites?: number; force?: boolean } = {}
+  opts: { full?: boolean; maxWrites?: number; force?: boolean; offset?: number } = {}
 ): Promise<ReconcileReport> {
   const publicationUri = await getPublicationUri(env.STATE);
   if (!publicationUri) {
@@ -252,7 +271,7 @@ export async function reconcile(
   const runOpts: ReconcileOptions = { maxWrites: opts.maxWrites ?? 200, sleepMs: 200 };
 
   const report = opts.full
-    ? await reconcileFull(await fetchAllPosts(env), deps, runOpts, opts.force ?? false)
+    ? await reconcileFull(await fetchAllPosts(env), deps, runOpts, opts.force ?? false, opts.offset ?? 0)
     : await reconcileWindow(
         await fetchPostsUpdatedSince(env, WINDOW_DAYS),
         await fetchAllPostIds(env),
