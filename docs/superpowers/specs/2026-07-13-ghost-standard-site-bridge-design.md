@@ -1,7 +1,10 @@
 # Ghost → standard.site bridge — design
 
 **Date:** 2026-07-13
-**Status:** Approved (spec authored by Ben; clarifying questions resolved 2026-07-13)
+**Status:** Approved (spec authored by Ben; clarifying questions resolved 2026-07-13).
+**Superseded in part** — see the *Post-implementation revisions* addendum at
+the bottom for where the shipped system deliberately diverges from this
+document. The README is the accurate operational reference.
 
 ## Goal
 
@@ -149,3 +152,53 @@ Vars: `ATPROTO_HANDLE`, `ATPROTO_DID`, `ATPROTO_PDS_URL`, `GHOST_URL`,
 - No full-body syndication.
 - No external databases or additional services; single deployable Worker.
 - No degradation of the blog under any failure mode.
+
+## Post-implementation revisions (addendum, kept current)
+
+The sections above are the original approved design. During implementation,
+deployment, and the first weeks of operation, the following deliberate
+revisions superseded parts of it. The README documents the current behavior
+authoritatively; this list explains what changed and why.
+
+1. **Configuration is env-only and `wrangler.jsonc` is generated.** No
+   identities, domains, or auth material are committed anywhere.
+   `scripts/configure.mjs` renders the gitignored `wrangler.jsonc` from
+   `wrangler.example.jsonc`, deriving the route/zone from `GHOST_URL`;
+   `scripts/secrets-json.mjs` + `wrangler secret bulk` push all runtime
+   values from `.dev.vars` (the single source of truth).
+2. **Publication rkey is a TID, not `self`.** Both site.standard lexicons
+   declare `key: tid` (confirmed from the published lexicon schema records —
+   the docs pages don't mention it). The rkey is minted at first setup,
+   reused via KV, and setup auto-migrates legacy rkeys; a
+   `?full=1&force=1` reconcile rewrites every document's `site` reference
+   afterwards.
+3. **Reconcile is windowed, not a daily full sweep.** The cron repairs posts
+   with `updated_at` in the last 3 days plus orphan deletion against an
+   ids-only enumeration (deletions can't be windowed). Cost is O(window)
+   regardless of archive size — the original daily full sweep exceeded
+   per-invocation operation limits at ~5,000 posts. The archive backfill is
+   an explicit `?full=1` mode that skips KV-known ids with zero per-post
+   reads; the cron never backfills.
+4. **The backfill runs in the queue consumer and self-chains.** A batch
+   takes minutes (write cap + 200ms politeness spacing), which no HTTP
+   request survives (hit as a real 502); the admin route enqueues a control
+   message, capped batches re-enqueue themselves, and every pass stores its
+   report in KV for `GET /_atproto/reconcile`. `limits.subrequests: 10000`
+   in the wrangler config accommodates batch cost.
+5. **Content API calls are lean and version-unpinned.** No post HTML is ever
+   downloaded (`fields` + `include=tags` verified to combine on Ghost 6);
+   the `accept-version` header is omitted entirely — Ghost 6 rejects clients
+   pinned to older majors with 406 UPDATE_CLIENT.
+6. **Ghost(Pro) operational learnings.** The Admin API is only served on the
+   `*.ghost.io` admin domain (a redirected POST becomes a bodyless GET →
+   404), so `scripts/create-webhooks.mjs` takes the admin domain as its
+   first argument. Webhook secrets can only be set via the Admin API, never
+   the Admin UI.
+7. **Single-post test path.** `npm run test-post` sends one signed
+   Ghost-shaped webhook for a real post through the full pipeline and
+   regenerates it on rerun via a signed `?force=1` (real webhooks never
+   carry force, so the save-spam debounce is untouched); `--delete` undoes
+   it. `NO_CRON=1` deploys exist for zero-scheduled-activity testing.
+8. **CI.** Every PR runs typecheck, the full vitest-in-workerd suite against
+   the tracked example config (no secrets needed), and syntax checks over
+   the deploy scripts.

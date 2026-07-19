@@ -16,7 +16,7 @@
  *   POST /_atproto/ghost-webhook               verify + enqueue
  *   GET  /.well-known/site.standard.publication publication AT-URI (public)
  *   POST /_atproto/setup                       create/update publication
- *   POST /_atproto/reconcile[?full=1][&max=N]  repair (inline) / backfill (queued)
+ *   POST /_atproto/reconcile[?full=1][&force=1][&max=N]  repair (inline) / backfill or migration rewrite (queued)
  *   GET  /_atproto/reconcile                   latest stored report
  *   *                                          proxy to Ghost, inject link tags
  */

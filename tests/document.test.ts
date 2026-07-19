@@ -6,7 +6,7 @@ import fixture from './fixtures/post-published.json';
 import type { GhostPost } from '../src/ghost/types';
 
 const post = fixture.post.current as GhostPost;
-const PUB_URI = 'at://did:plc:exampleuser0000000000000/site.standard.publication/self';
+const PUB_URI = 'at://did:plc:exampleuser0000000000000/site.standard.publication/3kizf2hc622ry';
 const GHOST_URL = 'https://blog.example.org';
 
 describe('normalizePath', () => {

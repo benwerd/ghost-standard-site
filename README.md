@@ -14,8 +14,9 @@ Cloudflare Worker routed in front of your domain:
   post pages via HTMLRewriter;
 - serves `GET /.well-known/site.standard.publication` (the authoritative
   publication verification endpoint);
-- runs a daily reconciliation cron that diffs the Ghost Content API against
-  KV and repairs drift — which doubles as the archive backfill.
+- runs a daily reconciliation cron that repairs recent drift (posts updated
+  in the last 3 days, plus orphan cleanup); the archive backfill is a
+  separate, explicitly-triggered reconcile mode.
 
 **Content policy:** metadata + excerpt only. The canonical content lives at
 your blog; full post bodies are never syndicated.
@@ -187,8 +188,8 @@ from the same custom integration page as `GHOST_CONTENT_API_KEY`.
 ## Setup
 
 Cautious first run? See **Trying it with a single post first** below — you
-can prove the whole pipeline on one post before creating webhooks or letting
-the backfill cron loose.
+can prove the whole pipeline on one post before creating webhooks or running
+the archive backfill.
 
 1. `npm install`
 2. `cp .dev.vars.example .dev.vars` and fill everything in — the
@@ -263,10 +264,11 @@ debounce via a signed `?force=1`), so you can tweak and rerun freely.
 `-- --slug <slug>` picks a different post; `-- --delete` removes the record
 again. Fully reversible.
 
-> **Why the cron matters here:** a normal deploy registers the daily
-> reconcile cron, and once the publication record exists that cron will
-> start backfilling your **entire archive** (200 posts/day). Deploy with
-> `NO_CRON=1` until you've opted into that.
+> **About the cron:** the daily reconcile cron only repairs the recent
+> window — it never touches the archive, so a normal deploy is safe even
+> mid-testing. `NO_CRON=1 npm run deploy` remains available if you want
+> zero scheduled activity while experimenting (before the publication is
+> set up, a cron run just logs an error and exits).
 
 ### Stage 1: entirely local (nothing deployed)
 
@@ -304,14 +306,10 @@ own).
 ### Stage 2: production, still just one post
 
 This is the only way to test the Bluesky card, since Bluesky's crawler has
-to fetch your real pages. Do setup steps 1–6 but deploy with the cron off:
-
-```bash
-NO_CRON=1 npm run deploy
-```
-
-Then create the publication and push the same single post through the
-deployed Worker:
+to fetch your real pages. Do setup steps 1–6 (`NO_CRON=1 npm run deploy` if
+you'd rather have no scheduled activity yet — the cron is harmless either
+way, see the callout above). Then create the publication and push the same
+single post through the deployed Worker:
 
 ```bash
 curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $SECRET"
@@ -328,11 +326,12 @@ iterating; it regenerates the same record. Undo with
 
 ### When you're confident
 
-1. `npm run deploy` (re-enables the cron)
+1. `npm run deploy` (with the cron, if you'd disabled it)
 2. Setup step 8 (`scripts/create-webhooks.mjs`) so real publishes flow
-3. Setup step 9 (repeated `/_atproto/reconcile?full=1`) to backfill the
-   archive — the daily cron only repairs the recent window, so the backfill
-   is an explicit step, not something the cron does behind your back
+3. Setup step 9 (`/_atproto/reconcile?full=1&max=1000`, one request,
+   self-chaining) to backfill the archive — the daily cron only repairs the
+   recent window, so the backfill is an explicit step, not something the
+   cron does behind your back
 
 ## Local development
 

@@ -88,11 +88,11 @@ describe('handleWebhook', () => {
 
 describe('handleWellKnown', () => {
   it('returns the publication AT-URI as text/plain', async () => {
-    await setPublicationUri(env.STATE, 'at://did:plc:x/site.standard.publication/self');
+    await setPublicationUri(env.STATE, 'at://did:plc:x/site.standard.publication/3kizf2hc622ry');
     const res = await handleWellKnown(env);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/plain');
-    expect(await res.text()).toBe('at://did:plc:x/site.standard.publication/self');
+    expect(await res.text()).toBe('at://did:plc:x/site.standard.publication/3kizf2hc622ry');
   });
   it('404s when no publication record exists yet', async () => {
     const res = await handleWellKnown(env);
@@ -112,7 +112,7 @@ describe('buildOriginRequest', () => {
 
 describe('injectLinkTags', () => {
   const DOC = 'at://did:plc:x/site.standard.document/3kizf2hc622ry';
-  const PUB = 'at://did:plc:x/site.standard.publication/self';
+  const PUB = 'at://did:plc:x/site.standard.publication/3kizf2hc622ry';
 
   it('injects both link tags into head', async () => {
     const page = new Response('<html><head><title>t</title></head><body>b</body></html>', {

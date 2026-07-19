@@ -10,7 +10,7 @@ import fixture from './fixtures/post-published.json';
 import type { GhostPost } from '../src/ghost/types';
 
 const post = fixture.post.current as GhostPost;
-const PUB_URI = 'at://did:plc:x/site.standard.publication/self';
+const PUB_URI = 'at://did:plc:x/site.standard.publication/3kizf2hc622ry';
 
 function fakeWriter() {
   const calls = { puts: [] as string[], deletes: [] as string[] };
