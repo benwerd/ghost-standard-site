@@ -242,14 +242,28 @@ the archive backfill.
    curl "https://yourdomain.com/_atproto/reconcile" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
    The backfill is finished when that report shows `"capped": false`.
-   **It paces itself against PDS write quotas**: Bluesky-hosted PDSes allow
-   ~5,000 write-points/hour (a create costs 3), so batches that hit a 429
-   stop early, record `errors`/`retryAfterS` in the report, and the chain
-   resumes when the quota window reopens. A multi-thousand-post archive
-   therefore takes **hours, mostly waiting** — that's correct behavior, not
-   a stall. A stalled chain looks like: no new report from GET for over an
-   hour *and* `wrangler tail` silent; re-POSTing the same command is always
-   safe (idempotent).
+   **It paces itself against PDS write quotas.** Measured directly against a
+   Bluesky-hosted PDS (from 429 response headers, 2026-07): the binding
+   limit is **35,000 write-points per fixed 24-hour window**
+   (`ratelimit-policy: 35000;w=86400`) — a create costs 3 points, an update
+   2, a delete 1 — plus a separate 3,000-requests-per-5-minutes bucket.
+   Crucially the daily window is **fixed, not rolling**: when it's drained
+   you stay at zero until the single reset instant, then the full 35,000
+   returns at once. Batches that hit a 429 stop early, record
+   `errors`/`retryAfterS` in the report, and the chain retries on that
+   schedule (hourly at worst; a wake-up against a still-drained window
+   costs ~3 points, so the waiting is nearly free). A one-pass backfill of
+   a 5,000-post archive costs ~15,000 points — half a day's budget — so it
+   completes within one or two windows; force rewrites cost ~2 points per
+   record on top. A stalled chain looks like: no new report from GET for
+   well over an hour *and* `wrangler tail` silent; re-POSTing the same
+   command is always safe (idempotent).
+   **The write quota is shared with everything else the account does** —
+   including your own posting through the Bluesky app. A backfill that
+   drains the window blocks *you* until the reset. To check the current
+   quota state without spending points, attempt a 1-point write and read
+   the `ratelimit-*` headers off the 429 (rejected writes cost nothing);
+   `ratelimit-reset` is the epoch second when the window reopens.
    A plain `POST` without `?full=1` runs the windowed repair (same as the
    daily cron: posts updated in the last 3 days, plus orphan cleanup)
    synchronously and returns its report directly.
@@ -382,8 +396,20 @@ npm run typecheck
   Adding `&force=1` to full mode rewrites *every* record in place instead —
   the migration tool for changes outside the content hash, e.g. after the
   publication record's rkey changes, every document's `site` reference must
-  be rewritten. Neither mode downloads post HTML — reconcile fetches a lean
-  field set.
+  be rewritten. Force chains resume via an internal offset so each record
+  is written exactly once per chain — but a full force pass still costs
+  ~2 points × every record (a third of the daily quota on a 5,000-post
+  archive). **When only the `site` reference needs fixing, prefer
+  `scripts/rewrite-site-refs.mjs`**: it runs locally, finds just the
+  records referencing an outdated publication URI, and rewrites only those
+  (dry-run by default, `--apply` to write, stops politely on 429 and is
+  safe to re-run). Neither reconcile mode downloads post HTML — reconcile
+  fetches a lean field set.
+- **Kill switch for a runaway or unwanted reconcile chain:**
+  `npx wrangler queues purge ghost-standard-site-events`. The chain lives
+  as a delayed queue message, so purging ends it immediately. Side effect:
+  any in-flight webhook events are dropped too — the daily windowed cron
+  repairs those automatically (or run a plain reconcile POST sooner).
 - The publication record's rkey is a TID minted at first setup and reused
   (from KV) on every re-run — the site.standard lexicons require `key: tid`
   for both record types, so a fixed literal like `self` fails validation.
