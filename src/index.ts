@@ -39,7 +39,10 @@ export default {
       // HTTP request can hold open — so it runs in the queue consumer and
       // re-enqueues itself until the archive is done. Poll with GET.
       if (url.searchParams.get('full') === '1') {
-        await env.EVENTS.send({ kind: 'reconcile', full: true, maxWrites });
+        // &force=1 rewrites every record even if unchanged — the migration
+        // path after e.g. a publication rkey change.
+        const force = url.searchParams.get('force') === '1';
+        await env.EVENTS.send({ kind: 'reconcile', full: true, maxWrites, force });
         return Response.json(
           {
             status: 'queued',
@@ -70,7 +73,11 @@ export default {
         continue;
       }
       try {
-        const report = await reconcile(env, { full: message.body.full, maxWrites: message.body.maxWrites });
+        const report = await reconcile(env, {
+          full: message.body.full,
+          maxWrites: message.body.maxWrites,
+          force: message.body.force,
+        });
         await setLastReconcileReport(env.STATE, report);
         if (report.capped) {
           // more archive left: chain the next batch

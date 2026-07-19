@@ -4,7 +4,6 @@ import type { PdsWriter } from '../sync';
 
 export const DOCUMENT_COLLECTION = 'site.standard.document';
 export const PUBLICATION_COLLECTION = 'site.standard.publication';
-export const PUBLICATION_RKEY = 'self';
 
 const MAX_BLOB_BYTES = 1_000_000; // lexicon: coverImage/icon blobs < 1MB
 

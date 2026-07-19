@@ -33,3 +33,26 @@ export function deriveRkey(post: { id: string; published_at?: string | null }): 
   }
   return encodeTid(fnv1a64('ghost-id:' + post.id) & 0x7fffffffffffffffn);
 }
+
+/** Shape of a valid TID rkey: 13 chars of base32-sortable. */
+export const TID_REGEX = /^[2-7a-z]{13}$/;
+
+/**
+ * The publication record's rkey. The site.standard.publication lexicon
+ * declares `key: tid` (confirmed against the published lexicon schema), so
+ * a fixed literal like `self` is rejected by validators.
+ *
+ * If the KV-stored publication URI already ends in a valid TID, reuse it —
+ * setup re-runs must keep updating the same record. Otherwise (first setup,
+ * or migrating off a legacy non-TID rkey) mint a TID from `nowMs`.
+ *
+ * NOTE: after the rkey changes, existing document records still reference
+ * the old publication URI in their `site` field — run
+ * `POST /_atproto/reconcile?full=1&force=1` to rewrite them.
+ */
+export function choosePublicationRkey(existingUri: string | null, nowMs: number): string {
+  const existing = existingUri?.split('/').pop();
+  if (existing && TID_REGEX.test(existing)) return existing;
+  const clockId = fnv1a64('site.standard.publication') & 0x3ffn;
+  return encodeTid(((BigInt(nowMs) * 1000n) << 10n) | clockId);
+}

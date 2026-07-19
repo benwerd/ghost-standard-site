@@ -95,6 +95,15 @@ describe('reconcileFull', () => {
     expect(report).toMatchObject({ created: 0, updated: 0, skipped: 3, deleted: 0, capped: false });
     expect(calls.puts).toHaveLength(0);
   });
+  it('force rewrites already-synced records in place (publication migration path)', async () => {
+    const { writer, calls } = fakeWriter();
+    await reconcileFull(many, deps(writer), OPTS);
+    const firstRkeys = [...calls.puts];
+    calls.puts.length = 0;
+    const report = await reconcileFull(many, deps(writer), OPTS, true);
+    expect(report).toMatchObject({ created: 0, updated: 3, skipped: 0 });
+    expect(calls.puts).toEqual(firstRkeys); // same records, same rkeys, rewritten
+  });
   it('deletes orphans no longer present in Ghost', async () => {
     const { writer } = fakeWriter();
     await processEvent(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveRkey, encodeTid } from '../src/atproto/tid';
+import { deriveRkey, encodeTid, choosePublicationRkey } from '../src/atproto/tid';
 
 describe('deriveRkey', () => {
   it('derives a TID from published_at with clock-id bits from the post id', () => {
@@ -32,5 +32,25 @@ describe('deriveRkey', () => {
 describe('encodeTid', () => {
   it('encodes zero as all-2s', () => {
     expect(encodeTid(0n)).toBe('2222222222222');
+  });
+});
+
+describe('choosePublicationRkey', () => {
+  const NOW = Date.parse('2026-07-13T12:00:00.000Z');
+
+  it('mints a valid TID when no publication exists yet', () => {
+    expect(choosePublicationRkey(null, NOW)).toMatch(/^[2-7a-z]{13}$/);
+  });
+  it('replaces a legacy non-TID rkey (the lexicon requires key: tid)', () => {
+    const rkey = choosePublicationRkey('at://did:plc:x/site.standard.publication/self', NOW);
+    expect(rkey).not.toBe('self');
+    expect(rkey).toMatch(/^[2-7a-z]{13}$/);
+  });
+  it('reuses an existing valid TID rkey so setup re-runs stay idempotent', () => {
+    const uri = 'at://did:plc:x/site.standard.publication/3kizf2hc622ry';
+    expect(choosePublicationRkey(uri, NOW)).toBe('3kizf2hc622ry');
+  });
+  it('is deterministic for a given mint time', () => {
+    expect(choosePublicationRkey(null, NOW)).toBe(choosePublicationRkey(null, NOW));
   });
 });
