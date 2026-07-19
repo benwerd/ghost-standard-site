@@ -10,6 +10,8 @@ export interface ReconcileCommand {
   kind: 'reconcile';
   full: boolean;
   maxWrites?: number;
+  /** Full mode only: rewrite every record even when unchanged (e.g. after a publication rkey migration). */
+  force?: boolean;
 }
 
 export type QueueMessage = SyncEvent | ReconcileCommand;

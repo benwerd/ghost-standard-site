@@ -372,7 +372,16 @@ npm run typecheck
   can't be windowed — deleted posts just vanish from the Content API). The
   *full* mode (`?full=1`) is the explicit backfill: it creates records for
   posts KV has never seen, skipping known ids without any per-post reads.
-  Neither mode downloads post HTML — reconcile fetches a lean field set.
+  Adding `&force=1` to full mode rewrites *every* record in place instead —
+  the migration tool for changes outside the content hash, e.g. after the
+  publication record's rkey changes, every document's `site` reference must
+  be rewritten. Neither mode downloads post HTML — reconcile fetches a lean
+  field set.
+- The publication record's rkey is a TID minted at first setup and reused
+  (from KV) on every re-run — the site.standard lexicons require `key: tid`
+  for both record types, so a fixed literal like `self` fails validation.
+  If setup ever finds a legacy non-TID rkey, it migrates: new record, old
+  one deleted, and its response tells you to run the `force` reconcile.
 - Record writes use `validate: false` because the PDS doesn't host the
   site.standard lexicons; server-side validation would reject them otherwise.
 - KV is eventually consistent (~60s): a link tag may appear up to a minute

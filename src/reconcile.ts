@@ -96,11 +96,17 @@ export async function reconcileWindow(
  * Backfill / deep repair: create records for posts KV has never seen, skipping
  * already-synced posts by id alone (zero KV reads for them — content drift on
  * synced posts is the windowed path's job), then orphan deletion.
+ *
+ * With `force`, known posts are NOT skipped: every record is rewritten in
+ * place (same rkey) with a forced upsert. This is the migration tool for
+ * changes that live outside the content hash — e.g. after the publication
+ * rkey changes, every document's `site` reference must be rewritten.
  */
 export async function reconcileFull(
   allPosts: GhostPost[],
   deps: SyncDeps,
-  opts: ReconcileOptions
+  opts: ReconcileOptions,
+  force = false
 ): Promise<ReconcileReport> {
   const report: ReconcileReport = { mode: 'full', created: 0, updated: 0, skipped: 0, deleted: 0, capped: false };
   const budget: WriteBudget = { writes: 0 };
@@ -108,7 +114,7 @@ export async function reconcileFull(
   const posts = allPosts.filter(isSyndicatable);
 
   for (const post of posts) {
-    if (known.has(post.id)) {
+    if (!force && known.has(post.id)) {
       report.skipped++;
       continue;
     }
@@ -116,7 +122,7 @@ export async function reconcileFull(
       report.capped = true;
       break;
     }
-    const result = await processEvent({ kind: 'upsert', post }, deps);
+    const result = await processEvent({ kind: 'upsert', post, force }, deps);
     if (result === 'skipped') {
       report.skipped++;
     } else {
@@ -131,10 +137,10 @@ export async function reconcileFull(
   return report;
 }
 
-/** Entry point for the cron trigger (windowed) and the admin route (windowed, or ?full=1). */
+/** Entry point for the cron trigger (windowed) and the admin route (windowed, or ?full=1[&force=1]). */
 export async function reconcile(
   env: Env,
-  opts: { full?: boolean; maxWrites?: number } = {}
+  opts: { full?: boolean; maxWrites?: number; force?: boolean } = {}
 ): Promise<ReconcileReport> {
   const publicationUri = await getPublicationUri(env.STATE);
   if (!publicationUri) {
@@ -150,7 +156,7 @@ export async function reconcile(
   const runOpts: ReconcileOptions = { maxWrites: opts.maxWrites ?? 200, sleepMs: 200 };
 
   const report = opts.full
-    ? await reconcileFull(await fetchAllPosts(env), deps, runOpts)
+    ? await reconcileFull(await fetchAllPosts(env), deps, runOpts, opts.force ?? false)
     : await reconcileWindow(
         await fetchPostsUpdatedSince(env, WINDOW_DAYS),
         await fetchAllPostIds(env),
