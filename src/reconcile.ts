@@ -62,11 +62,20 @@ const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : 
 /**
  * How long the chain should back off after a write failure, in seconds.
  *
- * Bluesky-hosted PDSes enforce write quotas (~5,000 points/hour; a create
- * costs 3, an update 2), so a large backfill batch WILL eventually see 429s.
- * Those carry a `ratelimit-reset` epoch header — honor it (clamped to
- * [60s, 1h]) so the chain resumes exactly when the window reopens. Anything
- * else gets a conservative 10 minutes.
+ * Bluesky-hosted PDSes enforce a write quota of 35,000 points per FIXED
+ * 24-hour window (create=3, update=2, delete=1; measured from live 429
+ * headers: `ratelimit-policy: 35000;w=86400`). Fixed means all-or-nothing:
+ * a drained window stays at zero until one reset instant, then refills
+ * entirely — so a large backfill WILL eventually see 429s, and recovery is
+ * never gradual. The 429's `ratelimit-reset` epoch header is honored,
+ * clamped to [60s, 1h]: the reset can be many hours out, and rather than
+ * trusting a far-future value we retry hourly — a wake-up against a
+ * still-drained window costs ~3 points, so bounded polling is nearly free
+ * and self-corrects the moment the window reopens. Non-429 failures get a
+ * conservative 10 minutes.
+ *
+ * NOTE: this quota is account-wide — shared with the owner's own posting.
+ * That's why batches stop at the FIRST 429 instead of hammering on.
  */
 export function writeFailureDelay(err: unknown, nowMs: number): number {
   const e = err as { status?: number; headers?: Record<string, string> };
