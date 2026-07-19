@@ -2,6 +2,12 @@
  * Shaping Ghost posts into `site.standard.document` records, plus the
  * content hash that debounces Ghost's save-spam.
  *
+ * A "record" is the little JSON document that lives in the blog owner's
+ * AT Protocol repo; `site.standard.document` is the lexicon (shared
+ * schema) for "an article on a website". This file is where a Ghost post
+ * gets translated into that shape — nothing here talks to the network,
+ * which is what makes it easy to test field by field.
+ *
  * Content policy (deliberate): metadata + excerpt only. The canonical
  * content lives at the blog — records carry no post body, so the lexicon's
  * `content`/`textContent` fields are never set.

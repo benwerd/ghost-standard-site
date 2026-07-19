@@ -1,6 +1,8 @@
 /**
- * GET /.well-known/site.standard.publication — the authoritative publication
- * verification endpoint defined by standard.site.
+ * GET /.well-known/site.standard.publication — the website's half of the
+ * verification handshake (the README crash course explains why both the
+ * site and the records must vouch for each other). This is the
+ * authoritative publication verification endpoint defined by standard.site.
  *
  * Verifiers (Bluesky's crawler, Atmosphere readers) resolve a publication
  * record's `url`, fetch this path on that domain, and compare the returned

@@ -1,7 +1,9 @@
 /**
- * Read-side client for the Ghost Content API, used by the reconcile sweep
- * and the publication setup route. (The webhook path never calls this —
- * webhook payloads already carry the post.)
+ * Read-side client for the Ghost Content API — Ghost's public, read-only
+ * API for published content (as opposed to the Admin API, which can change
+ * things and which this Worker deliberately never holds keys for). Used by
+ * the reconcile sweep and the publication setup route; the webhook path
+ * never calls this, since webhook payloads already carry the post.
  *
  * Design constraints baked in here:
  * - Lean fields only, never post HTML: reconcile enumerates the whole

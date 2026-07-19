@@ -1,5 +1,8 @@
 /**
- * Shaping the site-level `site.standard.publication` record.
+ * Shaping the site-level `site.standard.publication` record — the single
+ * record that represents the blog itself ("this website exists, here's its
+ * name, icon, and URL"). Every per-post document record points back at it
+ * via its AT-URI, the way articles point at their masthead.
  *
  * There is exactly one publication record per blog (rkey `self`), created
  * and updated by the /_atproto/setup admin route from Ghost's site settings.

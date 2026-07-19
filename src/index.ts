@@ -1,6 +1,16 @@
 /**
- * Worker entry point: routes the three Cloudflare triggers to the modules
- * that do the work.
+ * Worker entry point — start reading here.
+ *
+ * The big picture: this Worker connects a Ghost blog to the AT Protocol
+ * network (the one behind Bluesky). Ghost tells us about posts via
+ * webhooks; we mirror each public post as a `site.standard.document`
+ * record in the blog owner's own data repo, and serve the verification
+ * endpoints that let apps trust those records. If terms like DID, PDS,
+ * record, or rkey are new to you, the README's two-minute crash course
+ * explains them all — the code will make much more sense afterwards.
+ *
+ * Cloudflare invokes a Worker through named triggers; this file routes the
+ * three we use to the modules that do the work:
  *
  *   fetch     — bridge routes (webhook receiver, well-known verification,
  *               admin setup/reconcile) with everything else proxied to the

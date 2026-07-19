@@ -1,5 +1,10 @@
 /**
- * The Worker's connection to the AT Protocol PDS.
+ * The Worker's connection to the AT Protocol network.
+ *
+ * All writes go to the blog owner's PDS — the server that hosts their
+ * personal data repo (README crash course has the fuller picture). We log
+ * in with their handle + an app password, exactly like a mobile client
+ * would, and then create/update/delete records in their repo.
  *
  * Wraps @atproto/api behind two seams:
  * - `createSession` authenticates with handle + app password and enforces

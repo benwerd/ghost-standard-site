@@ -1,35 +1,101 @@
 # ghost-standard-site
 
-Syndicates a Ghost blog to AT Protocol using the
-[standard.site](https://standard.site) lexicons. Every public published post
-becomes a `site.standard.document` record in your own atproto repo, under
-your own DID; the site is one `site.standard.publication` record. A
-Cloudflare Worker routed in front of your domain:
+Publish on your [Ghost](https://ghost.org) blog; show up everywhere on the
+open social web.
 
-- receives Ghost webhooks (`POST /_atproto/ghost-webhook`, HMAC-verified) and
-  enqueues them on a Cloudflare Queue;
-- a queue consumer writes records to your PDS with automatic retry;
-- proxies all other traffic to the Ghost origin, injecting
-  `<link rel="site.standard.document">` (and the publication hint tag) into
-  post pages via HTMLRewriter;
-- serves `GET /.well-known/site.standard.publication` (the authoritative
-  publication verification endpoint);
-- runs a daily reconciliation cron that repairs recent drift (posts updated
-  in the last 3 days, plus orphan cleanup); the archive backfill is a
-  separate, explicitly-triggered reconcile mode.
+This is a Cloudflare Worker that connects a Ghost blog to the
+[AT Protocol](https://atproto.com) — the network behind Bluesky — using the
+[standard.site](https://standard.site) publishing format. Once it's running,
+every post you publish automatically becomes part of your identity on that
+network: links to your posts render as rich article cards on Bluesky, and
+long-form readers like Leaflet, pckt, Offprint, and Heron can discover and
+display your writing. You keep publishing in Ghost exactly as you always
+have; this Worker quietly handles the rest.
 
-**Content policy:** metadata + excerpt only. The canonical content lives at
-your blog; full post bodies are never syndicated.
+**You don't need to know anything about AT Protocol to use this.** The next
+section teaches you the five concepts that matter, in about two minutes.
 
-**Configuration policy:** no identities, domains, or auth material are
-committed to this repo. Everything lives in `.dev.vars` (gitignored) locally
-and `wrangler secret put` in production. `wrangler.jsonc` is gitignored and
-**generated** — `scripts/configure.mjs` renders it from
-`wrangler.example.jsonc`, deriving the route pattern and zone name from
-`GHOST_URL` (the Worker necessarily fronts the same domain the blog lives
-on) and taking the KV namespace id from `.dev.vars`. It runs automatically
-before `npm run dev` and `npm run deploy`; you never edit wrangler.jsonc by
-hand.
+## A two-minute AT Protocol crash course
+
+Skip this if you already know what a PDS is. Otherwise, here's everything
+this README assumes, in plain words:
+
+- **The Atmosphere** is the network of apps built on AT Protocol. Bluesky is
+  the famous one, but there are many others — including the long-form
+  reading apps this bridge makes your blog visible to.
+- **Your repo** is your personal, public data store on that network. When
+  you post on Bluesky, the post is saved as a little JSON document — a
+  **record** — in *your* repo, not in some company's database. Records are
+  organized into **collections** (think: folders named by type, like
+  `app.bsky.feed.post`), and each record has a key called an **rkey**
+  (think: filename). Every record has a permanent address called an
+  **AT-URI**, which looks like `at://<who>/<collection>/<rkey>`.
+- **Your DID** is your permanent account ID (an ugly string like
+  `did:plc:abc123…`), and your **handle** is the friendly name that points
+  at it (like `yourdomain.com`). Handles can change; DIDs never do.
+- **Your PDS** ("personal data server") is the server that physically hosts
+  your repo. If you signed up through Bluesky, they run one for you — you
+  can find its address but you never really have to think about it.
+- **Lexicons** are shared schemas — agreements about what a record of a
+  given type should contain, so every app can read every other app's
+  records. **standard.site** is a set of lexicons for publishing: a
+  `site.standard.publication` record describes a website (yours!), and a
+  `site.standard.document` record describes one article on it.
+
+Put together: this Worker writes one `site.standard.publication` record
+("this is my blog") plus one `site.standard.document` record per post
+("here's an article on it") into **your own repo, under your own DID**.
+Your writing becomes part of your identity on the network — not a copy
+held by some third-party bridge account.
+
+One more idea and you're fully equipped — **verification**. Anyone could
+write a record *claiming* to be yourdomain.com, so apps check both
+directions before believing it:
+
+1. Your website vouches for the records: a well-known URL
+   (`/.well-known/site.standard.publication`) returns your publication's
+   AT-URI, and each post's page carries a `<link>` tag pointing at its
+   record.
+2. The records point back at your website (the publication stores your
+   URL; each document stores its path).
+
+When both sides agree, apps know the DID really controls the domain — and
+that's what unlocks the rich article cards. This Worker serves both halves
+of that loop for you.
+
+## What the Worker actually does
+
+It sits in front of your domain (via a Cloudflare route) and wears four
+hats:
+
+- **Webhook receiver** — when you publish, edit, or delete a post, Ghost
+  calls `POST /_atproto/ghost-webhook`. The Worker checks the request is
+  really from Ghost (HMAC signature), then queues the work.
+- **Record writer** — a queue consumer picks up those events and creates,
+  updates, or deletes the matching record in your repo, with automatic
+  retries if your PDS hiccups.
+- **Verification server** — it answers
+  `GET /.well-known/site.standard.publication`, and it proxies all your
+  normal blog traffic to Ghost, slipping the verification `<link>` tags
+  into post pages on the way through. Everything else about your pages
+  passes through byte-for-byte untouched.
+- **Nightly janitor** — a daily cron compares Ghost against what's been
+  synced and repairs any drift (posts updated in the last 3 days, plus
+  cleanup of records whose posts are gone). The full-archive backfill is a
+  separate command you run on purpose — the cron never does it behind your
+  back.
+
+**Content policy:** records carry metadata plus your excerpt — never full
+post bodies. The canonical home of your writing is your blog; the records
+point readers there.
+
+**Configuration policy:** no identities, domains, or secrets are committed
+to this repo, ever. Everything lives in `.dev.vars` (gitignored) locally and
+in Worker secrets in production. Even `wrangler.jsonc` is gitignored and
+**generated**: `scripts/configure.mjs` renders it from
+`wrangler.example.jsonc`, deriving the route from your `GHOST_URL` and the
+KV namespace id from `.dev.vars`. It runs automatically before
+`npm run dev` and `npm run deploy` — you never edit wrangler.jsonc by hand.
 
 ## Configuration: where every value comes from
 
@@ -97,15 +163,15 @@ Your AT Protocol (Bluesky) handle, **without the leading `@`**.
 
 ### `ATPROTO_DID`
 
-Your account's permanent decentralized identifier. Don't type it from
-memory — resolve it from your handle:
+Your account's permanent ID (see the crash course above). Don't type it
+from memory — resolve it from your handle:
 
 ```bash
 curl "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=YOUR_HANDLE"
 ```
 
 - Returns: `{"did":"did:plc:abc123…"}` — the value starting `did:plc:` (or
-  `did:web:`) is what goes in `.dev.vars`, e.g. `did:plc:77tdak46psveqneyegsdyc7l`
+  `did:web:`) is what goes in `.dev.vars`
 - You can also see it at `https://bsky.app/profile/YOUR_HANDLE` → ⋯ menu →
   "Copy DID", or by opening the curl URL in a browser.
 - This is a safety net, not just metadata: at every session start the Worker
@@ -115,8 +181,8 @@ curl "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle
 
 ### `ATPROTO_PDS_URL`
 
-The server that hosts your repo (your PDS). It's recorded in your DID
-document — look it up using the DID from the previous step:
+The server that hosts your repo (see the crash course). It's recorded in
+your DID document — look it up using the DID from the previous step:
 
 ```bash
 curl "https://plc.directory/YOUR_DID"
@@ -210,21 +276,23 @@ the archive backfill.
    value still looks like a placeholder. Re-run it whenever `.dev.vars`
    changes.
 6. `npm run deploy` (regenerates `wrangler.jsonc`, then `wrangler deploy`)
-7. Create the publication record:
+7. Create the publication record — the "this is my blog" record everything
+   else hangs off:
    ```bash
    curl -X POST https://yourdomain.com/_atproto/setup -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
    Confirm: `curl https://yourdomain.com/.well-known/site.standard.publication`
    returns the AT-URI. (Ghost's site icon becomes the publication icon — make
    sure it's square and ≥256×256 in Ghost settings, then re-run setup if you
-   change it.)
-8. Create the webhooks. The Ghost Admin UI can't set webhook secrets, and
-   Ghost only signs requests when a secret exists, so use the Admin API.
-   The first argument is your **admin domain**: on Ghost(Pro) that's the
-   `*.ghost.io` address in your browser when you're logged into Ghost Admin
-   (the Admin API isn't served on the custom domain); self-hosted, it's the
-   same as your site URL. The second argument — where webhooks get
-   delivered — stays on your real domain:
+   change it. Setup is safe to re-run any time; it updates the same record.)
+8. Create the webhooks. A Ghost quirk to know about: the Admin UI can't set
+   webhook secrets, and Ghost only *signs* its deliveries when a secret
+   exists — so webhooks have to be created through Ghost's Admin API, which
+   this script does for you. The first argument is your **admin domain**:
+   on Ghost(Pro) that's the `*.ghost.io` address in your browser when
+   you're logged into Ghost Admin (the Admin API isn't served on your
+   custom domain); self-hosted, it's the same as your site URL. The second
+   argument — where webhooks get delivered — stays on your real domain:
    ```bash
    GHOST_ADMIN_API_KEY=... GHOST_WEBHOOK_SECRET=... \
      node scripts/create-webhooks.mjs https://your-site.ghost.io https://yourdomain.com/_atproto/ghost-webhook
@@ -242,31 +310,44 @@ the archive backfill.
    curl "https://yourdomain.com/_atproto/reconcile" -H "Authorization: Bearer $GHOST_WEBHOOK_SECRET"
    ```
    The backfill is finished when that report shows `"capped": false`.
-   **It paces itself against PDS write quotas.** Measured directly against a
-   Bluesky-hosted PDS (from 429 response headers, 2026-07): the binding
-   limit is **35,000 write-points per fixed 24-hour window**
-   (`ratelimit-policy: 35000;w=86400`) — a create costs 3 points, an update
-   2, a delete 1 — plus a separate 3,000-requests-per-5-minutes bucket.
-   Crucially the daily window is **fixed, not rolling**: when it's drained
-   you stay at zero until the single reset instant, then the full 35,000
-   returns at once. Batches that hit a 429 stop early, record
-   `errors`/`retryAfterS` in the report, and the chain retries on that
-   schedule (hourly at worst; a wake-up against a still-drained window
-   costs ~3 points, so the waiting is nearly free). A one-pass backfill of
-   a 5,000-post archive costs ~15,000 points — half a day's budget — so it
-   completes within one or two windows; force rewrites cost ~2 points per
-   record on top. A stalled chain looks like: no new report from GET for
-   well over an hour *and* `wrangler tail` silent; re-POSTing the same
-   command is always safe (idempotent).
-   **The write quota is shared with everything else the account does** —
-   including your own posting through the Bluesky app. A backfill that
-   drains the window blocks *you* until the reset. To check the current
-   quota state without spending points, attempt a 1-point write and read
-   the `ratelimit-*` headers off the 429 (rejected writes cost nothing);
-   `ratelimit-reset` is the epoch second when the window reopens.
-   A plain `POST` without `?full=1` runs the windowed repair (same as the
-   daily cron: posts updated in the last 3 days, plus orphan cleanup)
-   synchronously and returns its report directly.
+   Read **Write quotas** below before you run this — the backfill knows how
+   to pace itself, but it's worth understanding what it's pacing against.
+   (A plain `POST` without `?full=1` runs the windowed repair — same as the
+   daily cron — synchronously and returns its report directly.)
+
+## Write quotas (please read before backfilling)
+
+Your PDS limits how much an account can write, and — this is the important
+part — **that budget is shared between this bridge and everything else you
+do as that account, including posting on Bluesky yourself.**
+
+The numbers, measured directly against a Bluesky-hosted PDS (from 429
+response headers, 2026-07): **35,000 write-points per fixed 24-hour window**
+(`ratelimit-policy: 35000;w=86400`) — a create costs 3 points, an update 2,
+a delete 1 — plus a separate 3,000-requests-per-5-minutes bucket. The daily
+window is **fixed, not rolling**: when it's drained you stay at zero until
+the single reset instant, then the full 35,000 returns at once. There is no
+gradual recovery.
+
+What this means in practice:
+
+- A one-pass backfill of a 5,000-post archive costs ~15,000 points — half a
+  day's budget — so it completes within one or two windows.
+- The backfill handles all of this automatically: batches that hit a 429
+  stop early, record `errors`/`retryAfterS` in the report, and the chain
+  retries on that schedule (hourly at worst; a wake-up against a
+  still-drained window costs ~3 points, so the waiting is nearly free).
+- But if a backfill *does* drain the window, **you** are blocked from
+  posting too, until the reset. Plan a big backfill for a day you weren't
+  going to live-post much.
+- To check your current quota without spending anything: attempt a 1-point
+  write and read the `ratelimit-*` headers off the 429 (rejected writes
+  cost nothing); `ratelimit-reset` is the epoch second when the window
+  reopens.
+- A genuinely stalled chain (rare) looks like: no new report from GET for
+  well over an hour *and* `wrangler tail` silent. Re-POSTing the same
+  command is always safe — every operation here is idempotent, meaning
+  running it twice can't create duplicates.
 
 ## Trying it with a single post first
 
@@ -364,6 +445,10 @@ npm test                          # vitest in workerd via @cloudflare/vitest-poo
 npm run typecheck
 ```
 
+Tests need no configuration at all — they run against the tracked
+`wrangler.example.jsonc`, so `git clone` + `npm install` + `npm test` works
+on a machine that's never seen your values.
+
 ## Manual end-to-end verification (definition of done)
 
 1. Publish a test post in Ghost.
@@ -372,7 +457,8 @@ npm run typecheck
    ```bash
    curl "$ATPROTO_PDS_URL/xrpc/com.atproto.repo.getRecord?repo=$ATPROTO_DID&collection=site.standard.document&rkey=<rkey>"
    ```
-   Also browsable at `https://pdsls.dev/at/<your-did>/site.standard.document`.
+   Also browsable at `https://pdsls.dev/at/<your-did>/site.standard.document`
+   — pdsls.dev is a handy web viewer for anyone's repo.
 3. `curl -s https://yourdomain.com/<slug>/ | grep site.standard` shows both
    link tags. (KV is eventually consistent — allow up to a minute after
    publish.)
@@ -381,54 +467,71 @@ npm run typecheck
    Bluesky's crawler — **the Bluesky card is the real test.**
 5. Check the post appears in Leaflet / pckt / Offprint / Heron discovery.
 
-## Operational notes
+## How it behaves day to day
 
-- **Everything fails open.** KV miss → no tags, page untouched; PDS down →
-  queue retries (5×, then the daily cron repairs); any error in injection
-  lookup → origin response passes through. The blog never degrades.
-- **Reconcile has two modes, both O(cheap) at any archive size.** The daily
-  cron runs the *windowed* mode: hash-checked upserts for posts updated in
-  the last 3 days (catches missed publish/edit webhooks) plus orphan
-  deletion against an ids-only enumeration of all public posts (deletions
-  can't be windowed — deleted posts just vanish from the Content API). The
-  *full* mode (`?full=1`) is the explicit backfill: it creates records for
-  posts KV has never seen, skipping known ids without any per-post reads.
-  Adding `&force=1` to full mode rewrites *every* record in place instead —
-  the migration tool for changes outside the content hash, e.g. after the
-  publication record's rkey changes, every document's `site` reference must
-  be rewritten. Force chains resume via an internal offset so each record
-  is written exactly once per chain — but a full force pass still costs
+Things you'd otherwise learn the hard way, collected:
+
+- **Everything fails open — the blog can never be degraded.** A missing KV
+  entry means a page renders without link tags (not broken); a PDS outage
+  means the queue retries (5×) and the daily cron repairs whatever's left;
+  any error during tag injection passes the original page through
+  untouched.
+- **Edits are debounced.** Ghost fires its "edited" webhook on *every* save
+  of a published post, even when nothing meaningful changed. The Worker
+  hashes the fields that actually appear in the record (title, path,
+  excerpt, publish date, tags, feature image) and skips the write when the
+  hash matches — so autosave spam never touches your PDS.
+- **Everything is idempotent.** Record keys (rkeys) are derived
+  deterministically from each post's publish time plus a hash of its Ghost
+  id — the same post always maps to the same record, so webhook replays,
+  reruns, and reconciliation can never create duplicates. Renaming a slug
+  keeps the same record and updates its path. (The id-hash bits exist
+  because bulk-imported posts often share the same timestamp.)
+- **Only public, published posts get records.** Drafts, members-only,
+  email-only newsletters, and pages are ignored; a published post edited to
+  non-public gets its record deleted.
+- **Deleting a post deletes its record** (both the webhook path and the
+  janitor handle this). Downstream apps drop it as the deletion propagates
+  through the network — like deleting a Bluesky post, it's propagation,
+  not instant erasure everywhere.
+- **The reconcile sweep has two modes, both cheap at any archive size.**
+  The daily cron runs *windowed* mode: it re-checks posts updated in the
+  last 3 days (catching any webhook Ghost dropped — Ghost fires webhooks
+  once, best-effort, no retries) plus orphan deletion, comparing your full
+  KV state against an ids-only listing of all public posts. *Full* mode
+  (`?full=1`) is the explicit backfill: it creates records for posts never
+  seen before, skipping known ones instantly. Neither downloads post HTML.
+- **`&force=1` is the sledgehammer** — full mode that rewrites *every*
+  record in place, for migrations where something outside the content hash
+  changed. Force chains resume via an internal offset so each record is
+  written exactly once per chain — but a full force pass still costs
   ~2 points × every record (a third of the daily quota on a 5,000-post
   archive). **When only the `site` reference needs fixing, prefer
   `scripts/rewrite-site-refs.mjs`**: it runs locally, finds just the
   records referencing an outdated publication URI, and rewrites only those
-  (dry-run by default, `--apply` to write, stops politely on 429 and is
-  safe to re-run). Neither reconcile mode downloads post HTML — reconcile
-  fetches a lean field set.
+  (dry-run by default, `--apply` to write, stops politely on 429, safe to
+  re-run).
 - **Kill switch for a runaway or unwanted reconcile chain:**
   `npx wrangler queues purge ghost-standard-site-events`. The chain lives
   as a delayed queue message, so purging ends it immediately. Side effect:
-  any in-flight webhook events are dropped too — the daily windowed cron
-  repairs those automatically (or run a plain reconcile POST sooner).
-- The publication record's rkey is a TID minted at first setup and reused
-  (from KV) on every re-run — the site.standard lexicons require `key: tid`
-  for both record types, so a fixed literal like `self` fails validation.
-  If setup ever finds a legacy non-TID rkey, it migrates: new record, old
-  one deleted, and its response tells you to run the `force` reconcile.
-- Record writes use `validate: false` because the PDS doesn't host the
-  site.standard lexicons; server-side validation would reject them otherwise.
-- KV is eventually consistent (~60s): a link tag may appear up to a minute
-  after publish. Acceptable by design; if that ever stops being acceptable,
-  the flagged alternative is D1, not a silent workaround.
-- Ghost fires `post.published.edited` on *every* save of a published post; a
-  SHA-256 hash over material fields (title, path, excerpt, publish date,
-  tags, feature image) debounces actual PDS writes.
-- rkeys are deterministic TIDs derived from `published_at` plus 10 bits of
-  post-id hash (collision-safe for bulk imports sharing a timestamp), so
-  webhook replays and reconciliation are idempotent. Slug changes keep the
-  same record (same rkey) and update its `path` + both KV mappings.
-- The Worker asserts at session start that the authenticated DID equals
-  `ATPROTO_DID` and refuses to write otherwise.
-- Non-public posts (drafts, members-only, email-only, pages) never get
-  records; a published post edited to non-public visibility gets its record
-  deleted.
+  any in-flight webhook events are dropped too — the daily cron repairs
+  those automatically (or run a plain reconcile POST sooner).
+- **The publication's rkey is a TID** (a timestamp-based id — the standard
+  record-key format on the network), minted at first setup and reused on
+  every re-run. The site.standard lexicons require `key: tid` for both
+  record types; a fixed name like `self` fails validation. If setup finds a
+  legacy non-TID rkey, it migrates automatically — new record, old one
+  deleted — and its response tells you to run the force reconcile so
+  existing documents point at the new publication.
+- **Record writes use `validate: false`.** Your PDS only schema-validates
+  record types it hosts lexicons for, and it doesn't host standard.site's —
+  without this flag it would reject the writes outright.
+- **KV is eventually consistent (~60s)** — a link tag may appear up to a
+  minute after publish, which is fine for this use. Heads-up if you
+  auto-post links to Bluesky (e.g. via Zapier): the card is generated when
+  the link is first fetched, so give the tag a head start with a ~5-minute
+  delay step, or the card renders plain from cache.
+- **A wrong handle can't hurt you.** At every session start the Worker
+  compares the DID it actually logged in as against `ATPROTO_DID` and
+  refuses to write on mismatch — a typo'd handle can never publish into
+  someone else's repo.

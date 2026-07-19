@@ -1,7 +1,12 @@
 /**
- * The sync engine: the one place that turns a SyncEvent into PDS writes and
- * KV state changes. Both consumers of events — the queue consumer (webhook
- * path) and the reconcile sweep — funnel through processEvent, so
+ * The sync engine — the heart of the bridge.
+ *
+ * "Sync" here means: given one piece of news about a Ghost post ("it was
+ * published/edited" or "it's gone"), make the AT Protocol side match — by
+ * creating, updating, or deleting the post's record on the owner's PDS
+ * (their personal data server; see the README crash course) and keeping our
+ * KV bookkeeping in step. This is the ONE place that logic lives: both the
+ * webhook path and the reconcile sweep funnel through processEvent, so
  * idempotency and the edit debounce are enforced identically everywhere.
  *
  * Network access is abstracted behind `PdsWriter`, so the whole engine is

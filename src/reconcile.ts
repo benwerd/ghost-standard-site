@@ -1,6 +1,13 @@
 /**
- * The reconcile sweep: the safety net under Ghost's fire-once webhooks, and
- * the archive backfill. Two modes, both idempotent and both capped:
+ * The reconcile sweep: the safety net under Ghost's webhooks, and the
+ * archive backfill.
+ *
+ * Why it exists: Ghost fires each webhook exactly once, best-effort, with
+ * no retries — so sooner or later one gets lost, and without a repair
+ * mechanism that post would silently never sync. Reconcile periodically
+ * compares what Ghost has against what we've synced and fixes the
+ * difference. It's also how a pre-existing archive of posts gets imported
+ * in the first place. Two modes, both idempotent and both capped:
  *
  * WINDOWED (daily cron + plain admin POST): hash-checked upserts for posts
  * updated in the last WINDOW_DAYS (catches missed publish/edit webhooks),

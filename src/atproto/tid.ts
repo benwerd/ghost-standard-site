@@ -1,9 +1,13 @@
 /**
  * Deterministic record-key (rkey) derivation.
  *
- * atproto rkeys in this collection are TIDs: 13 characters of
- * base32-sortable encoding over a 64-bit value laid out as
- * (microseconds since epoch << 10) | 10-bit clock id.
+ * Every record in an AT Protocol repo has a key — its "rkey", like a
+ * filename within its collection. The standard.site lexicons require rkeys
+ * to be TIDs ("timestamp identifiers"): 13 characters of base32-sortable
+ * encoding over a 64-bit value laid out as
+ * (microseconds since epoch << 10) | 10-bit clock id. A TID is normally
+ * minted from the current clock; the trick in this file is minting them
+ * from the POST's data instead.
  *
  * The bridge derives them deterministically from the Ghost post instead of
  * the clock, which is what makes every write path idempotent: a replayed

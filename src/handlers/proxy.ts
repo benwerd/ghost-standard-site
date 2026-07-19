@@ -1,6 +1,9 @@
 /**
- * The catch-all: proxy every non-bridge request to the Ghost origin, and
- * inject standard.site verification link tags into post pages.
+ * The catch-all: every request that isn't one of the bridge's own routes —
+ * which is to say, all of the blog's actual reader traffic — flows through
+ * here on its way to Ghost. We pass it along unchanged, with one exception:
+ * post pages get the standard.site verification `<link>` tags slipped into
+ * their <head> (the page's half of the verification handshake).
  *
  * Prime directive — never degrade the blog. Every branch fails open: a KV
  * miss, a KV error, a non-HTML response, or a non-200 all return the origin

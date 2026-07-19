@@ -1,6 +1,9 @@
 /**
- * POST /_atproto/setup — one-off (but idempotent) publication bootstrap,
- * plus the shared admin authorization check.
+ * POST /_atproto/setup — the "hello, world" of the whole bridge: creates
+ * the publication record that represents the blog on the network. Run once
+ * during setup (and re-run any time the site's name/description/icon
+ * changes — it's idempotent). Also home to the shared admin authorization
+ * check used by every operator route.
  *
  * Creates or updates the singleton `site.standard.publication` record from
  * Ghost's live site settings (title, description, icon) and stores its

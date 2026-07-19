@@ -1,5 +1,7 @@
 /**
- * Verification of Ghost's webhook signatures.
+ * Verification of Ghost's webhook signatures — how we know a request to the
+ * webhook endpoint really came from Ghost and not from anyone on the
+ * internet who found the URL.
  *
  * Ghost signs each webhook delivery — but ONLY when the webhook was created
  * with a secret, which the Admin UI cannot do (hence scripts/create-webhooks.mjs).

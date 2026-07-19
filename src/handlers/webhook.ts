@@ -1,5 +1,6 @@
 /**
- * POST /_atproto/ghost-webhook — the receiver Ghost delivers to.
+ * POST /_atproto/ghost-webhook — the front door. When you hit Publish in
+ * Ghost, Ghost calls this URL; everything the bridge does starts here.
  *
  * Responsibilities are deliberately minimal so the response is fast (Ghost
  * counts anything non-2xx, including timeouts, as a delivery failure and

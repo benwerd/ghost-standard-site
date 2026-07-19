@@ -1,5 +1,12 @@
 /**
- * The Worker's state layer: one KV namespace, keyed in both directions.
+ * The Worker's state layer — everything the bridge remembers.
+ *
+ * Cloudflare KV is a simple key→value store. We use one namespace to
+ * remember which Ghost post maps to which AT Protocol record (and back
+ * again by URL path, since the page proxy only knows the path of the page
+ * it's serving). Lose this data and nothing breaks permanently — a full
+ * reconcile rebuilds it — but the mappings are what make everyday
+ * operations fast and idempotent. Keys, in both directions:
  *
  *   post:{ghost_post_id} → PostState (rkey, AT-URI, content hash, path)
  *   path:{url_path}      → { atUri }  (the HTMLRewriter lookup — the proxy

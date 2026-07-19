@@ -1,5 +1,7 @@
 /**
- * Turns raw Ghost webhook payloads into sync events.
+ * Turns raw Ghost webhook payloads into sync events — the "what does this
+ * webhook actually mean for us?" step between receiving a delivery and
+ * doing any work.
  *
  * This is the single place where syndication policy lives: only public,
  * published, web-visible posts get `site.standard.document` records. Pages,
