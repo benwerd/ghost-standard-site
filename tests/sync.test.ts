@@ -1,3 +1,6 @@
+// The sync engine end-to-end minus the network: fake PdsWriter, real
+// (miniflare) KV. Covers idempotent create/update/skip/force/delete and the
+// slug-rename path move.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { processEvent, type PdsWriter } from '../src/sync';

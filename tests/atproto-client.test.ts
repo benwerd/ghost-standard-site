@@ -1,3 +1,6 @@
+// The DID safety assertion — the guard that keeps a misconfigured handle from
+// ever writing to the wrong repo. (Network-touching client code is exercised
+// via the PdsWriter fake elsewhere.)
 import { describe, it, expect } from 'vitest';
 import { assertSessionDid } from '../src/atproto/client';
 

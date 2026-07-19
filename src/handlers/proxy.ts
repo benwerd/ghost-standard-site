@@ -1,11 +1,25 @@
+/**
+ * The catch-all: proxy every non-bridge request to the Ghost origin, and
+ * inject standard.site verification link tags into post pages.
+ *
+ * Prime directive — never degrade the blog. Every branch fails open: a KV
+ * miss, a KV error, a non-HTML response, or a non-200 all return the origin
+ * response untouched (byte-identical). Only a successful GET/HEAD HTML page
+ * whose path has a KV mapping gets rewritten, and even then HTMLRewriter
+ * streams the transform without buffering the page.
+ *
+ * Ghost's redirects (e.g. /slug → /slug/) pass through to the browser
+ * unfollowed (`redirect: 'manual'`), preserving origin behavior exactly.
+ */
 import type { Env } from '../env';
 import { normalizePath } from '../records/document';
 import { getPathUri, getPublicationUri } from '../state/kv';
 
 /**
  * Point the incoming request at the Ghost origin. In production on the
- * configured domain's route this resolves to a same-zone subrequest that goes straight
- * to origin; in `wrangler dev` it retargets localhost URLs at GHOST_URL.
+ * configured domain's route this resolves to a same-zone subrequest that
+ * goes straight to origin (it does not re-trigger this Worker); in
+ * `wrangler dev` it retargets localhost URLs at GHOST_URL.
  */
 export function buildOriginRequest(request: Request, ghostUrl: string): Request {
   const url = new URL(request.url);
@@ -16,10 +30,16 @@ export function buildOriginRequest(request: Request, ghostUrl: string): Request 
   return new Request(url.toString(), request);
 }
 
+/** Escape a value for use inside a double-quoted HTML attribute. */
 function escapeAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * Append the standard.site link tags to the page's <head> via streaming
+ * HTMLRewriter: the required document tag, plus the publication hint tag
+ * when the publication URI is known.
+ */
 export function injectLinkTags(response: Response, docUri: string, pubUri: string | null): Response {
   let tags = `<link rel="site.standard.document" href="${escapeAttr(docUri)}">`;
   if (pubUri) tags += `<link rel="site.standard.publication" href="${escapeAttr(pubUri)}">`;
@@ -36,6 +56,9 @@ export function injectLinkTags(response: Response, docUri: string, pubUri: strin
  * Proxy everything to origin. Only successful GET/HEAD HTML responses whose
  * path has a KV entry get link tags injected; every other response — and any
  * KV failure — passes through untouched (fail open, never degrade the blog).
+ *
+ * The path lookup uses the same normalizePath as record shaping, which is
+ * what guarantees the injected tag matches the record's `path` field.
  */
 export async function handleProxy(request: Request, env: Env): Promise<Response> {
   const originResponse = await fetch(buildOriginRequest(request, env.GHOST_URL), {

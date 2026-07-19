@@ -1,3 +1,6 @@
+// HTTP surface: webhook receiver (signature gate, enqueue, force flag),
+// well-known verification endpoint, origin request rewriting, and HTMLRewriter
+// link-tag injection.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { handleWebhook } from '../src/handlers/webhook';

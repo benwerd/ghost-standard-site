@@ -1,3 +1,25 @@
+/**
+ * Worker entry point: routes the three Cloudflare triggers to the modules
+ * that do the work.
+ *
+ *   fetch     — bridge routes (webhook receiver, well-known verification,
+ *               admin setup/reconcile) with everything else proxied to the
+ *               Ghost origin via handleProxy
+ *   queue     — consumes sync events (PDS writes with retry) and reconcile
+ *               control messages (long backfills that self-chain)
+ *   scheduled — the daily windowed reconcile (the safety net for Ghost's
+ *               fire-once webhooks)
+ *
+ * Route map (everything under /_atproto/ requires the admin bearer token
+ * except the webhook, which authenticates via its HMAC signature):
+ *
+ *   POST /_atproto/ghost-webhook               verify + enqueue
+ *   GET  /.well-known/site.standard.publication publication AT-URI (public)
+ *   POST /_atproto/setup                       create/update publication
+ *   POST /_atproto/reconcile[?full=1][&max=N]  repair (inline) / backfill (queued)
+ *   GET  /_atproto/reconcile                   latest stored report
+ *   *                                          proxy to Ghost, inject link tags
+ */
 import type { Env, QueueMessage, SyncEvent } from './env';
 import { handleWebhook } from './handlers/webhook';
 import { handleWellKnown } from './handlers/wellknown';
@@ -9,6 +31,11 @@ import { getPublicationUri, setLastReconcileReport, getLastReconcileReport } fro
 import { processEvent, type SyncDeps } from './sync';
 
 export default {
+  /**
+   * HTTP dispatch. Bridge routes are matched exactly; anything else falls
+   * through to the fail-open origin proxy, so an unrecognized path can
+   * never break the blog.
+   */
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
@@ -64,6 +91,19 @@ export default {
     return handleProxy(request, env);
   },
 
+  /**
+   * Queue consumer. Handles two message families:
+   *
+   * Reconcile commands run a full pass each; a capped pass re-enqueues the
+   * same command (with a short delay) so the backfill chains itself to
+   * completion. Failures retry after 2 minutes — safe, because every pass
+   * is idempotent.
+   *
+   * Sync events share one PDS session per batch. Each message acks or
+   * retries independently: one failing post doesn't block the rest, and the
+   * queue's retry policy (5 attempts) plus the daily cron cover transient
+   * PDS outages.
+   */
   async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
     const postMessages: Message<QueueMessage>[] = [];
 
@@ -95,6 +135,8 @@ export default {
 
     const publicationUri = await getPublicationUri(env.STATE);
     if (!publicationUri) {
+      // Documents must reference the publication record; without it, park
+      // the events and let the retry pick them up after setup runs.
       console.error('queue: publication record not set up; retrying later');
       for (const message of postMessages) message.retry({ delaySeconds: 300 });
       return;
@@ -118,6 +160,12 @@ export default {
     }
   },
 
+  /**
+   * Daily cron: the windowed reconcile. Deliberately NOT the archive
+   * backfill — full sweeps only happen on explicit operator request. The
+   * report is stored for GET /_atproto/reconcile; failures are logged and
+   * left for the next day's run (or a manual pass).
+   */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       reconcile(env)

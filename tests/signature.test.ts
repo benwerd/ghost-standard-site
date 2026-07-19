@@ -1,3 +1,6 @@
+// Ghost webhook signature verification: a known-answer HMAC vector (generated
+// with node crypto against the documented format) plus negative cases —
+// tampered body, wrong secret, stale timestamp, malformed/missing header.
 import { describe, it, expect } from 'vitest';
 import { parseSignatureHeader, verifyGhostSignature, timingSafeEqualStr } from '../src/ghost/signature';
 

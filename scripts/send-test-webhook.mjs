@@ -21,6 +21,7 @@ import { readDevVars, DEV_VARS } from './dev-vars.mjs';
 
 const args = process.argv.slice(2);
 const doDelete = args.includes('--delete');
+// Value following a --flag argument, or undefined if the flag is absent.
 const argValue = (flag) => {
   const i = args.indexOf(flag);
   return i >= 0 ? args[i + 1] : undefined;

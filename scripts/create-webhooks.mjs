@@ -28,7 +28,10 @@ if (!ghostUrl || !targetUrl || !adminKey || !webhookSecret) {
   process.exit(1);
 }
 
+// Ghost Admin API keys are '<id>:<hexsecret>'; the id becomes the JWT kid,
+// the secret (hex-decoded) signs it. See https://docs.ghost.org/admin-api/#token-authentication
 const [id, secret] = adminKey.split(':');
+// base64url-encode a JSON value (JWT header/payload segments)
 const b64url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 const header = b64url({ alg: 'HS256', typ: 'JWT', kid: id });

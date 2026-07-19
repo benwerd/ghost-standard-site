@@ -1,3 +1,5 @@
+// Pins the deterministic rkey algorithm with precomputed vectors so any
+// change to TID derivation (which would orphan every existing record) fails loudly.
 import { describe, it, expect } from 'vitest';
 import { deriveRkey, encodeTid, choosePublicationRkey } from '../src/atproto/tid';
 

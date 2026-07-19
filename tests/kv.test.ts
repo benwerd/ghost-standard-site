@@ -1,3 +1,5 @@
+// KV state helpers against the real (miniflare) STATE binding: both-direction
+// post/path mappings, slug-rename cleanup, publication URI, reconcile report.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import {

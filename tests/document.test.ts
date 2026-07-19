@@ -1,3 +1,5 @@
+// site.standard.document shaping (field-by-field against the webhook fixture)
+// and the material-fields content hash that debounces Ghost's save-spam.
 import { describe, it, expect } from 'vitest';
 import { normalizePath, postPath, shapeDocumentRecord, contentHash } from '../src/records/document';
 import fixture from './fixtures/post-published.json';

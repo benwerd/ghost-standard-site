@@ -1,13 +1,36 @@
+/**
+ * The Worker's connection to the AT Protocol PDS.
+ *
+ * Wraps @atproto/api behind two seams:
+ * - `createSession` authenticates with handle + app password and enforces
+ *   the DID safety assertion before anything can write.
+ * - `createPdsWriter` adapts the agent to the narrow `PdsWriter` interface
+ *   the sync engine consumes, so everything above this file is testable
+ *   with a fake and never touches the network in tests.
+ *
+ * Every record write uses `validate: false` because the PDS does not host
+ * the site.standard lexicons — server-side schema validation would reject
+ * the records otherwise.
+ */
 import { AtpAgent } from '@atproto/api';
 import type { Env } from '../env';
 import type { PdsWriter } from '../sync';
 
+/** Collection NSID for per-post document records. */
 export const DOCUMENT_COLLECTION = 'site.standard.document';
+/** Collection NSID for the site-level publication record. */
 export const PUBLICATION_COLLECTION = 'site.standard.publication';
+// (The publication's rkey is not a constant: the lexicon requires `key: tid`,
+// so it's minted at first setup — see choosePublicationRkey in atproto/tid.ts.)
 
-const MAX_BLOB_BYTES = 1_000_000; // lexicon: coverImage/icon blobs < 1MB
+/** Lexicon constraint: coverImage/icon blobs must be under 1MB. */
+const MAX_BLOB_BYTES = 1_000_000;
 
-/** A misconfigured handle must never write to the wrong repo. */
+/**
+ * A misconfigured handle must never write to the wrong repo: called at
+ * session start with the DID the PDS actually authenticated, this throws
+ * unless it matches the configured ATPROTO_DID exactly.
+ */
 export function assertSessionDid(sessionDid: string | undefined, expected: string): void {
   if (!sessionDid || sessionDid !== expected) {
     throw new Error(
@@ -16,6 +39,11 @@ export function assertSessionDid(sessionDid: string | undefined, expected: strin
   }
 }
 
+/**
+ * Log in to the PDS with handle + app password and return an authenticated
+ * agent, after the DID assertion passes. Called per invocation (queue batch,
+ * setup, reconcile) — app-password sessions are cheap to create.
+ */
 export async function createSession(env: Env): Promise<AtpAgent> {
   const agent = new AtpAgent({ service: env.ATPROTO_PDS_URL });
   await agent.login({ identifier: env.ATPROTO_HANDLE, password: env.ATPROTO_APP_PASSWORD });
@@ -23,7 +51,12 @@ export async function createSession(env: Env): Promise<AtpAgent> {
   return agent;
 }
 
-/** Fetch an image URL and upload it as a blob. Returns undefined on any failure or oversize. */
+/**
+ * Fetch an image URL and upload it as a blob, returning the BlobRef to embed
+ * in a record. Returns undefined on any failure — missing image, non-2xx,
+ * empty body, or over the 1MB lexicon cap — because a cover image is never
+ * worth failing a record write over (fail open).
+ */
 export async function uploadImageFromUrl(agent: AtpAgent, url: string): Promise<unknown | undefined> {
   try {
     const res = await fetch(url);
@@ -39,10 +72,15 @@ export async function uploadImageFromUrl(agent: AtpAgent, url: string): Promise<
   }
 }
 
+/**
+ * Adapt an authenticated agent to the `PdsWriter` interface the sync engine
+ * uses. All writes target the configured DID's repo with `validate: false`
+ * (the PDS doesn't host the site.standard lexicons).
+ */
 export function createPdsWriter(agent: AtpAgent, env: Env): PdsWriter {
   return {
+    /** Create or replace the document record at `rkey` in the configured repo. */
     async putDocument(rkey, record) {
-      // PDS does not host the site.standard lexicons: validate must be false.
       const res = await agent.com.atproto.repo.putRecord({
         repo: env.ATPROTO_DID,
         collection: DOCUMENT_COLLECTION,
@@ -52,6 +90,7 @@ export function createPdsWriter(agent: AtpAgent, env: Env): PdsWriter {
       });
       return { uri: res.data.uri };
     },
+    /** Delete the document record at `rkey`; an already-gone record is success. */
     async deleteDocument(rkey) {
       try {
         await agent.com.atproto.repo.deleteRecord({
@@ -64,6 +103,7 @@ export function createPdsWriter(agent: AtpAgent, env: Env): PdsWriter {
         if (status !== 400 && status !== 404) throw err; // already gone is fine
       }
     },
+    /** See uploadImageFromUrl — undefined on any failure, never throws. */
     async fetchImageBlob(url) {
       return uploadImageFromUrl(agent, url);
     },
