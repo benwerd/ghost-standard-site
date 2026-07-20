@@ -345,10 +345,27 @@ What this means in practice:
   write and read the `ratelimit-*` headers off the 429 (rejected writes
   cost nothing); `ratelimit-reset` is the epoch second when the window
   reopens.
-- A stalled chain (rare) looks like: no new report from GET for well over
-  an hour *and* `wrangler tail` silent. Re-POSTing the same command is
-  always safe, because every operation here is idempotent, meaning running
-  it twice can't create duplicates.
+- **Batches that create records run slower than you'd guess**: each create
+  fetches and uploads the post's cover image, so it takes 2–4 seconds per
+  record, not milliseconds. A `max=400` create batch can run 15–25 minutes
+  and brush against the queue consumer's 15-minute wall limit. That's
+  survivable (Cloudflare kills and auto-retries the batch, and idempotency
+  means the retry resumes where it left off), but `max=150` keeps each
+  batch comfortably under the limit for image-heavy archives.
+- **A long batch is invisible while it runs.** `wrangler tail` only emits
+  an event when an invocation *finishes*, and the report is only written
+  at batch completion, so a hard-working backfill looks exactly like a
+  dead one from those two signals. The ground truth is record count: list
+  the collection twice a few minutes apart, and if the count is climbing,
+  it's working. (Learned the embarrassing way.)
+- A stalled chain (rare) looks like: record count frozen across two checks
+  a few minutes apart, no new report from GET for well over an hour, *and*
+  `wrangler tail` silent. Re-POSTing the same command is always safe,
+  because every operation here is idempotent, meaning running it twice
+  can't create duplicates. If the queue itself ever stops delivering,
+  `scripts/local-backfill.mjs` creates missing records directly from your
+  machine with full Worker parity (record shape, rkeys, KV bookkeeping),
+  no queue involved.
 
 ## Trying it with a single post first
 
