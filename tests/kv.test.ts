@@ -46,6 +46,35 @@ describe('post state', () => {
   });
 });
 
+describe('path entries (derive-on-miss support)', () => {
+  it('distinguishes unknown, cached-positive, and cached-negative paths', async () => {
+    const { getPathEntry, putPathUri, putPathNegative } = await import('../src/state/kv');
+    expect(await getPathEntry(env.STATE, '/unknown')).toBeNull();
+    await putPathUri(env.STATE, '/a-post', 'at://did:plc:x/site.standard.document/3kizf2hc622ry');
+    expect((await getPathEntry(env.STATE, '/a-post'))?.atUri).toBe('at://did:plc:x/site.standard.document/3kizf2hc622ry');
+    await putPathNegative(env.STATE, '/about');
+    const neg = await getPathEntry(env.STATE, '/about');
+    expect(neg).not.toBeNull();
+    expect(neg?.atUri).toBeNull();
+  });
+  it('a later real mapping overwrites a cached negative', async () => {
+    const { getPathEntry, putPathNegative } = await import('../src/state/kv');
+    await putPathNegative(env.STATE, '/new-post');
+    await putPostState(env.STATE, 'p9', { ...state, path: '/new-post' });
+    expect((await getPathEntry(env.STATE, '/new-post'))?.atUri).toBe(state.atUri);
+  });
+});
+
+describe('session cache', () => {
+  it('round-trips atproto session data', async () => {
+    const { getSessionData, putSessionData } = await import('../src/state/kv');
+    expect(await getSessionData(env.STATE)).toBeNull();
+    const sess = { did: 'did:plc:x', handle: 'x.test', accessJwt: 'aaa', refreshJwt: 'rrr', active: true };
+    await putSessionData(env.STATE, sess as never);
+    expect((await getSessionData(env.STATE))?.accessJwt).toBe('aaa');
+  });
+});
+
 describe('reconcile report', () => {
   it('round-trips the last report with a timestamp', async () => {
     const { setLastReconcileReport, getLastReconcileReport } = await import('../src/state/kv');

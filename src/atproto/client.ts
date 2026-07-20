@@ -20,6 +20,7 @@
 import { AtpAgent } from '@atproto/api';
 import type { Env } from '../env';
 import type { PdsWriter } from '../sync';
+import { getSessionData, putSessionData } from '../state/kv';
 
 /** Collection NSID for per-post document records. */
 export const DOCUMENT_COLLECTION = 'site.standard.document';
@@ -45,14 +46,43 @@ export function assertSessionDid(sessionDid: string | undefined, expected: strin
 }
 
 /**
- * Log in to the PDS with handle + app password and return an authenticated
- * agent, after the DID assertion passes. Called per invocation (queue batch,
- * setup, reconcile); app-password sessions are cheap to create.
+ * Return an authenticated agent, after the DID assertion passes.
+ *
+ * Prefers resuming the KV-cached session over a fresh app-password login:
+ * that shaves a round-trip of latency per invocation and, more importantly,
+ * stays clear of the PDS's separate createSession rate limits (which fresh
+ * logins consume and resumed sessions don't). The cache is best-effort in
+ * both directions: an expired or invalid cached session falls back to a
+ * full login, and token refreshes are written back via persistSession so
+ * the next invocation picks them up.
  */
 export async function createSession(env: Env): Promise<AtpAgent> {
-  const agent = new AtpAgent({ service: env.ATPROTO_PDS_URL });
+  const agent = new AtpAgent({
+    service: env.ATPROTO_PDS_URL,
+    persistSession: (_evt, session) => {
+      // fire-and-forget: worst case the write is lost and the next
+      // invocation falls back to a fresh login
+      if (session) void putSessionData(env.STATE, session).catch(() => {});
+    },
+  });
+
+  const cached = await getSessionData(env.STATE).catch(() => null);
+  if (cached) {
+    try {
+      await agent.resumeSession(cached);
+      assertSessionDid(agent.session?.did, env.ATPROTO_DID);
+      return agent;
+    } catch (err) {
+      // Don't swallow the safety check: a DID mismatch means misconfiguration,
+      // not a stale token, and a fresh login would only "fix" it silently.
+      if (err instanceof Error && /refusing to write/.test(err.message)) throw err;
+      // otherwise: expired/invalid cache, so fall through to a full login
+    }
+  }
+
   await agent.login({ identifier: env.ATPROTO_HANDLE, password: env.ATPROTO_APP_PASSWORD });
   assertSessionDid(agent.session?.did, env.ATPROTO_DID);
+  if (agent.session) await putSessionData(env.STATE, agent.session).catch(() => {});
   return agent;
 }
 

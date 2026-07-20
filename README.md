@@ -439,7 +439,7 @@ npm run test-post -- --url https://yourdomain.com/_atproto/ghost-webhook
 npx wrangler tail   # watch the queue consumer log the write
 ```
 
-Give KV up to a minute, then check `curl -s https://yourdomain.com/<slug>/ |
+Give it a few seconds, then check `curl -s https://yourdomain.com/<slug>/ |
 grep site.standard`, and post the URL on Bluesky. The enhanced article card
 is the definitive pass. Rerun the same command as often as you like while
 iterating; it regenerates the same record. Undo with
@@ -478,8 +478,8 @@ on a machine that's never seen your values.
    Also browsable at `https://pdsls.dev/at/<your-did>/site.standard.document`
    (pdsls.dev is a handy web viewer for anyone's repo).
 3. `curl -s https://yourdomain.com/<slug>/ | grep site.standard` shows both
-   link tags. (KV is eventually consistent; allow up to a minute after
-   publish.)
+   link tags. (This works within seconds of publish: if KV hasn't caught up
+   yet, the proxy derives the tag on the fly and caches it.)
 4. Post the URL in Bluesky; the link should render as an enhanced article
    card. Records have passed third-party validators while silently failing
    Bluesky's crawler, so **the Bluesky card is the real test.**
@@ -544,11 +544,16 @@ Things you'd otherwise learn the hard way, collected:
 - **Record writes use `validate: false`.** Your PDS only schema-validates
   record types it hosts lexicons for, and it doesn't host standard.site's;
   without this flag it would reject the writes outright.
-- **KV is eventually consistent (~60s)**, so a link tag may appear up to a
-  minute after publish, which is fine for this use. Heads-up if you
-  auto-post links to Bluesky (e.g. via Zapier): the card is generated when
-  the link is first fetched, so give the tag a head start with a ~5-minute
-  delay step, or the card renders plain from cache.
+- **Link tags don't wait for KV.** KV is eventually consistent (~60s), but
+  the proxy doesn't depend on that for freshness: on a never-seen path it
+  asks Ghost whether the slug is a post and derives the record's AT-URI
+  directly (deterministic rkey + configured DID), caching the answer either
+  way. A new post's page carries correct tags on its very first view,
+  seconds after publish; non-post pages get a cached negative so they don't
+  repeat the lookup. End-to-end, publish → record + live tag is a few
+  seconds. If you auto-post links to Bluesky (e.g. via Zapier), a short
+  delay step (~1 minute) is still smart headroom, because the card is
+  generated when the link is first fetched and cached after that.
 - **A wrong handle can't hurt you.** At every session start the Worker
   compares the DID it actually logged in as against `ATPROTO_DID` and
   refuses to write on mismatch, so a typo'd handle can never publish into

@@ -5,8 +5,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { handleWebhook } from '../src/handlers/webhook';
 import { handleWellKnown } from '../src/handlers/wellknown';
-import { buildOriginRequest, injectLinkTags } from '../src/handlers/proxy';
+import { buildOriginRequest, injectLinkTags, docUriForPost } from '../src/handlers/proxy';
 import { setPublicationUri } from '../src/state/kv';
+import { deriveRkey } from '../src/atproto/tid';
 import fixture from './fixtures/post-published.json';
 import type { Env, SyncEvent } from '../src/env';
 
@@ -107,6 +108,24 @@ describe('buildOriginRequest', () => {
       'https://blog.example.org'
     );
     expect(req.url).toBe('https://blog.example.org/hello-atmosphere/?x=1');
+  });
+});
+
+describe('docUriForPost (derive-on-miss core)', () => {
+  const post = fixture.post.current as import('../src/ghost/types').GhostPost;
+  const DID = 'did:plc:exampleuser0000000000000';
+  const GHOST = 'https://blog.example.org';
+
+  it('derives the record AT-URI for a syndicatable post at its real path', () => {
+    const uri = docUriForPost(post, DID, GHOST, '/hello-atmosphere');
+    expect(uri).toBe(`at://${DID}/site.standard.document/${deriveRkey(post)}`);
+  });
+  it('returns null when the requested path is not the post canonical path (e.g. tag pages)', () => {
+    expect(docUriForPost(post, DID, GHOST, '/tag/hello-atmosphere')).toBeNull();
+  });
+  it('returns null for non-syndicatable posts', () => {
+    expect(docUriForPost({ ...post, visibility: 'members' }, DID, GHOST, '/hello-atmosphere')).toBeNull();
+    expect(docUriForPost({ ...post, email_only: true }, DID, GHOST, '/hello-atmosphere')).toBeNull();
   });
 });
 
