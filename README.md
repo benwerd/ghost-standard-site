@@ -18,7 +18,7 @@ section teaches you the five concepts that matter, in about two minutes.
 ## A two-minute AT Protocol crash course
 
 Skip this if you already know what a PDS is. Otherwise, here's everything
-this README assumes, in plain words:
+this README assumes:
 
 - **The Atmosphere** is the network of apps built on AT Protocol. Bluesky is
   the famous one, but there are many others, including the long-form
@@ -90,7 +90,7 @@ post bodies. The canonical home of your writing is your blog; the records
 point readers there.
 
 **Configuration policy:** no identities, domains, or secrets are committed
-to this repo, ever. Everything lives in `.dev.vars` (gitignored) locally and
+to this repo, ever. Everything lives in `.dev.vars` locally and
 in Worker secrets in production. Even `wrangler.jsonc` is gitignored and
 **generated**: `scripts/configure.mjs` renders it from
 `wrangler.example.jsonc`, deriving the route from your `GHOST_URL` and the
@@ -99,7 +99,7 @@ KV namespace id from `.dev.vars`. It runs automatically before
 
 ## Configuration: where every value comes from
 
-`.dev.vars` (gitignored) is the single source of truth: fill it in once and
+`.dev.vars` is the single source of truth: fill it in once and
 the same values drive local dev, `wrangler.jsonc` generation
 (`npm run configure`), and production secrets (`npm run push-secrets`).
 
@@ -163,8 +163,7 @@ Your AT Protocol (Bluesky) handle, **without the leading `@`**.
 
 ### `ATPROTO_DID`
 
-Your account's permanent ID (see the crash course above). Don't type it
-from memory; resolve it from your handle:
+Your account's permanent ID. Resolve it from your handle:
 
 ```bash
 curl "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=YOUR_HANDLE"
@@ -318,12 +317,11 @@ running the archive backfill.
 
 ## Write quotas (please read before backfilling)
 
-Your PDS limits how much an account can write. Here's the important part:
-**that budget is shared between this bridge and everything else you do as
+Your PDS limits how much an account can write. 
+**That budget is shared between this bridge and everything else you do as
 that account, including posting on Bluesky yourself.**
 
-The numbers, measured directly against a Bluesky-hosted PDS (from 429
-response headers, 2026-07): **35,000 write-points per fixed 24-hour window**
+That seems to amount to: **35,000 write-points per fixed 24-hour window**
 (`ratelimit-policy: 35000;w=86400`), where a create costs 3 points, an
 update 2, and a delete 1, plus a separate 3,000-requests-per-5-minutes
 bucket. The daily window is **fixed, not rolling**: when it's drained you
