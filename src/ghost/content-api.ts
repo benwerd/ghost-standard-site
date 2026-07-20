@@ -88,6 +88,22 @@ export async function fetchAllPostIds(env: Env): Promise<Set<string>> {
   return new Set(posts.map((p) => p.id));
 }
 
+/**
+ * One post by slug (lean fields), or null if Ghost has no such post. Used by
+ * the proxy's derive-on-miss path, so it must stay cheap: no tags, no HTML.
+ */
+export async function fetchPostBySlug(env: Env, slug: string): Promise<GhostPost | null> {
+  const url = new URL(`/ghost/api/content/posts/slug/${encodeURIComponent(slug)}/`, env.GHOST_URL);
+  url.searchParams.set('key', env.GHOST_CONTENT_API_KEY);
+  url.searchParams.set('fields', 'id,slug,url,visibility,email_only,published_at,updated_at');
+  const res = await fetch(url.toString());
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Ghost Content API error ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as { posts?: GhostPost[] };
+  const post = data.posts?.[0];
+  return post ? { ...post, status: post.status ?? 'published' } : null;
+}
+
 /** Site title/description/icon, used once by /_atproto/setup to shape the publication record. */
 export async function fetchSettings(env: Env): Promise<GhostSettings> {
   const url = new URL('/ghost/api/content/settings/', env.GHOST_URL);

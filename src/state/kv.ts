@@ -14,11 +14,12 @@
  *   publication          → { atUri }  (the site-level record's AT-URI)
  *   reconcile:last       → StoredReconcileReport (latest sweep, any mode)
  *
- * KV is eventually consistent (~60s propagation), which is an accepted
- * tradeoff: a link tag appearing up to a minute after publish is fine. If
- * that ever stops being acceptable, the deliberate alternative is a D1
- * migration (see the README's operational notes); don't work around it
- * silently.
+ * KV is eventually consistent (~60s propagation). That's fine here because
+ * nothing latency-sensitive depends on propagation: the proxy derives a
+ * fresh post's tag on the fly when a path has no entry yet (see
+ * handlers/proxy.ts), and everything else tolerates a stale read. If a use
+ * ever appears that genuinely needs consistent reads, the deliberate
+ * alternative is a D1 migration; don't work around it silently.
  *
  * Paths stored here are always in `normalizePath` form (leading slash, no
  * trailing slash), matching what the record shaper writes and the proxy
@@ -72,13 +73,44 @@ export async function deletePostState(kv: KVNamespace, postId: string, path?: st
 }
 
 /**
- * The document AT-URI for a normalized page path, or null. This is the
- * proxy's hot-path lookup: null (or any error, handled by the caller) means
- * "inject nothing, pass the page through untouched".
+ * A path's cached lookup result. `atUri: string` means "this page has a
+ * record" (inject its tag); `atUri: null` is a cached negative ("we checked,
+ * this page is not a post"), which keeps non-post pages from paying the
+ * derive-on-miss Content API lookup on every view.
+ */
+export interface PathEntry {
+  atUri: string | null;
+}
+
+/**
+ * Tri-state path lookup for the proxy: a PathEntry (positive or negative),
+ * or null meaning "never checked"; the caller may then derive the answer
+ * from the Ghost Content API and cache it.
+ */
+export async function getPathEntry(kv: KVNamespace, path: string): Promise<PathEntry | null> {
+  return kv.get<PathEntry>(PATH_PREFIX + path, 'json');
+}
+
+/** Cache a positive path→record mapping (also written by putPostState). */
+export async function putPathUri(kv: KVNamespace, path: string, atUri: string): Promise<void> {
+  await kv.put(PATH_PREFIX + path, JSON.stringify({ atUri }));
+}
+
+/**
+ * Cache "this path is not a post" for an hour. Safe even if the path later
+ * becomes a post: the sync engine's putPostState overwrites it immediately.
+ */
+export async function putPathNegative(kv: KVNamespace, path: string): Promise<void> {
+  await kv.put(PATH_PREFIX + path, JSON.stringify({ atUri: null }), { expirationTtl: 3600 });
+}
+
+/**
+ * The document AT-URI for a normalized page path, or null. Convenience over
+ * getPathEntry for callers that don't care about the negative/unknown
+ * distinction.
  */
 export async function getPathUri(kv: KVNamespace, path: string): Promise<string | null> {
-  const entry = await kv.get<{ atUri: string }>(PATH_PREFIX + path, 'json');
-  return entry?.atUri ?? null;
+  return (await getPathEntry(kv, path))?.atUri ?? null;
 }
 
 /**
@@ -113,6 +145,24 @@ export async function setLastReconcileReport(kv: KVNamespace, report: unknown): 
 /** The most recent reconcile report, or null if none has completed yet. */
 export async function getLastReconcileReport(kv: KVNamespace): Promise<StoredReconcileReport | null> {
   return kv.get<StoredReconcileReport>(RECONCILE_REPORT_KEY, 'json');
+}
+
+/**
+ * Cached PDS session tokens, so queue batches can resume an existing session
+ * instead of doing a fresh app-password login every time. Best-effort: if
+ * the cached session is expired or garbage, createSession falls back to a
+ * full login and overwrites it.
+ */
+const SESSION_KEY = 'session';
+
+/** The cached atproto session, or null if none stored yet. */
+export async function getSessionData(kv: KVNamespace): Promise<import('@atproto/api').AtpSessionData | null> {
+  return kv.get<import('@atproto/api').AtpSessionData>(SESSION_KEY, 'json');
+}
+
+/** Store session tokens after a login or refresh. */
+export async function putSessionData(kv: KVNamespace, session: import('@atproto/api').AtpSessionData): Promise<void> {
+  await kv.put(SESSION_KEY, JSON.stringify(session));
 }
 
 /** The publication record's AT-URI: what /.well-known serves and documents reference. Null before setup. */
