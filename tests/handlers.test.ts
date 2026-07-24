@@ -5,8 +5,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { handleWebhook } from '../src/handlers/webhook';
 import { handleWellKnown } from '../src/handlers/wellknown';
-import { buildOriginRequest, injectLinkTags, docUriForPost } from '../src/handlers/proxy';
-import { setPublicationUri } from '../src/state/kv';
+import { buildOriginRequest, injectLinkTags, docUriForPost, resolveOnMiss } from '../src/handlers/proxy';
+import { setPublicationUri, getPathEntry, putPostState } from '../src/state/kv';
 import { deriveRkey } from '../src/atproto/tid';
 import fixture from './fixtures/post-published.json';
 import type { Env, SyncEvent } from '../src/env';
@@ -126,6 +126,51 @@ describe('docUriForPost (derive-on-miss core)', () => {
   it('returns null for non-syndicatable posts', () => {
     expect(docUriForPost({ ...post, visibility: 'members' }, DID, GHOST, '/hello-atmosphere')).toBeNull();
     expect(docUriForPost({ ...post, email_only: true }, DID, GHOST, '/hello-atmosphere')).toBeNull();
+  });
+});
+
+describe('resolveOnMiss (derive, then verify)', () => {
+  const post = fixture.post.current as import('../src/ghost/types').GhostPost;
+  const DID = 'did:plc:exampleuser0000000000000';
+  const testEnv = () => ({ ...env, ATPROTO_DID: DID, GHOST_URL: 'https://blog.example.org' });
+  const derived = `at://${DID}/site.standard.document/${deriveRkey(post)}`;
+
+  it('advertises a derived URI only after confirming the record exists, and caches it', async () => {
+    const uri = await resolveOnMiss('/hello-atmosphere', testEnv(), {
+      fetchPost: async () => post,
+      recordExists: async () => true,
+    });
+    expect(uri).toBe(derived);
+    expect((await getPathEntry(env.STATE, '/hello-atmosphere'))?.atUri).toBe(derived);
+  });
+  it('advertises nothing and caches nothing when the record does not exist yet', async () => {
+    const uri = await resolveOnMiss('/hello-atmosphere', testEnv(), {
+      fetchPost: async () => post,
+      recordExists: async () => false,
+    });
+    expect(uri).toBeNull();
+    expect(await getPathEntry(env.STATE, '/hello-atmosphere')).toBeNull(); // retried next view
+  });
+  it('prefers stored post state over derivation (date-edited posts keep their original rkey)', async () => {
+    const originalUri = `at://${DID}/site.standard.document/3kizf2hc622ry`; // ≠ derived
+    await putPostState(env.STATE, post.id, {
+      rkey: '3kizf2hc622ry', atUri: originalUri, contentHash: 'x', path: '/hello-atmosphere', updatedAt: '',
+    });
+    const uri = await resolveOnMiss('/hello-atmosphere', testEnv(), {
+      fetchPost: async () => post,
+      recordExists: async () => { throw new Error('should not be called when state exists'); },
+    });
+    expect(uri).toBe(originalUri);
+  });
+  it('caches a negative for paths that are not posts', async () => {
+    const uri = await resolveOnMiss('/about', testEnv(), {
+      fetchPost: async () => null,
+      recordExists: async () => true,
+    });
+    expect(uri).toBeNull();
+    const entry = await getPathEntry(env.STATE, '/about');
+    expect(entry).not.toBeNull();
+    expect(entry?.atUri).toBeNull();
   });
 });
 
