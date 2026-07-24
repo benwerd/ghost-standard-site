@@ -16,11 +16,16 @@
  *    negative: "not a post", cached so non-post pages don't pay layer 2 on
  *    every view).
  * 2. Derive-on-miss: for a never-seen path, ask the Ghost Content API for a
- *    post with that slug and compute the record's AT-URI directly (the
- *    rkey is deterministic and the DID is config), so no KV propagation is
- *    needed. This is what makes a brand-new post's tag correct on the very
- *    first page view, seconds after publish, instead of waiting up to a
- *    minute for KV to settle. The answer is written back to KV either way.
+ *    post with that slug, then resolve its record URI in trust order:
+ *    stored post state first (authoritative; survives date edits, which
+ *    change what derivation would produce while the record keeps its
+ *    original rkey), then derivation VERIFIED against the PDS (a derived
+ *    URI is only advertised after confirming the record exists, so a lost
+ *    webhook can never make a page point at a nonexistent record). This is
+ *    what makes a brand-new post's tag correct on the very first page view,
+ *    seconds after publish, instead of waiting up to a minute for KV to
+ *    settle. Confirmed answers are written back to KV; "record not written
+ *    yet" caches nothing and simply retries on the next view.
  *
  * Ghost's redirects (e.g. /slug → /slug/) pass through to the browser
  * unfollowed (`redirect: 'manual'`), preserving origin behavior exactly.
@@ -31,7 +36,8 @@ import { normalizePath, postPath } from '../records/document';
 import { deriveRkey } from '../atproto/tid';
 import { isSyndicatable } from '../ghost/classify';
 import { fetchPostBySlug } from '../ghost/content-api';
-import { getPathEntry, putPathUri, putPathNegative, getPublicationUri } from '../state/kv';
+import { documentRecordExists } from '../atproto/client';
+import { getPathEntry, putPathUri, putPathNegative, getPublicationUri, getPostState } from '../state/kv';
 
 /**
  * Point the incoming request at the Ghost origin. In production on the
@@ -87,21 +93,60 @@ export function docUriForPost(
   return `at://${did}/site.standard.document/${deriveRkey(post)}`;
 }
 
+/** Injectable lookups for resolveOnMiss, so tests can run it without a network. */
+export interface ResolveDeps {
+  fetchPost: (env: Env, slug: string) => Promise<GhostPost | null>;
+  recordExists: (env: Env, rkey: string) => Promise<boolean>;
+}
+
+const liveResolveDeps: ResolveDeps = {
+  fetchPost: fetchPostBySlug,
+  recordExists: documentRecordExists,
+};
+
 /**
  * Layer 2: never-seen path. Ask Ghost whether the last path segment is a
- * post slug, derive the AT-URI if so, and cache the answer (positive or
- * negative) so this lookup happens at most once per path per hour. Any
- * failure returns null and caches nothing: fail open, try again next view.
+ * post slug, then resolve the record URI in trust order:
+ *
+ * 1. Stored post state, when it exists: authoritative, because the record
+ *    keeps its original rkey even if the post's publish date was edited
+ *    (which changes what derivation would produce).
+ * 2. Derivation, VERIFIED: the computed URI is only advertised after the
+ *    PDS confirms the record exists. A brand-new post whose record hasn't
+ *    been written yet (or whose webhook was lost) gets no tag and no cache
+ *    entry, so the next view simply retries; once the record lands, the
+ *    tag appears and is cached.
+ *
+ * Confirmed answers are cached (positive permanently, "not a post" for an
+ * hour). Any failure returns null and caches nothing: fail open.
  */
-async function resolveOnMiss(path: string, env: Env): Promise<string | null> {
+export async function resolveOnMiss(
+  path: string,
+  env: Env,
+  deps: ResolveDeps = liveResolveDeps
+): Promise<string | null> {
   const slug = path.split('/').filter(Boolean).pop();
   if (!slug) return null; // the root path is never a post
   try {
-    const post = await fetchPostBySlug(env, slug);
-    const uri = post ? docUriForPost(post, env.ATPROTO_DID, env.GHOST_URL, path) : null;
-    if (uri) await putPathUri(env.STATE, path, uri);
-    else await putPathNegative(env.STATE, path);
-    return uri;
+    const post = await deps.fetchPost(env, slug);
+    const derivedUri = post ? docUriForPost(post, env.ATPROTO_DID, env.GHOST_URL, path) : null;
+    if (!post || !derivedUri) {
+      await putPathNegative(env.STATE, path);
+      return null;
+    }
+
+    const state = await getPostState(env.STATE, post.id);
+    if (state) {
+      await putPathUri(env.STATE, path, state.atUri);
+      return state.atUri;
+    }
+
+    const rkey = derivedUri.split('/').pop() as string;
+    if (await deps.recordExists(env, rkey)) {
+      await putPathUri(env.STATE, path, derivedUri);
+      return derivedUri;
+    }
+    return null; // record not written yet: no tag, no cache, retry next view
   } catch {
     return null;
   }

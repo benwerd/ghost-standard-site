@@ -542,15 +542,19 @@ Things you'd otherwise learn the hard way, collected:
 - **Record writes use `validate: false`.** Your PDS only schema-validates
   record types it hosts lexicons for, and it doesn't host standard.site's;
   without this flag it would reject the writes outright.
-- **Link tags don't wait for KV.** KV is eventually consistent (~60s), but
-  the proxy doesn't depend on that for freshness: on a never-seen path it
-  asks Ghost whether the slug is a post and derives the record's AT-URI
-  directly (deterministic rkey + configured DID), caching the answer either
-  way. A new post's page carries correct tags on its very first view,
+- **Link tags don't wait for KV, and never point at nothing.** KV is
+  eventually consistent (~60s), but the proxy doesn't depend on that for
+  freshness: on a never-seen path it asks Ghost whether the slug is a post,
+  then resolves the record URI in trust order. Stored post state wins when
+  it exists (it survives publish-date edits, which change what derivation
+  would produce while the record keeps its original rkey); otherwise the
+  derived URI is advertised only after the PDS confirms the record exists,
+  so a lost webhook can't make a page point at a record that isn't there.
+  Confirmed answers are cached; "record not written yet" retries on the
+  next view. A new post's page carries correct tags on its very first view,
   seconds after publish; non-post pages get a cached negative so they don't
-  repeat the lookup. End-to-end, publish → record + live tag is a few
-  seconds. If you auto-post links to Bluesky (e.g. via Zapier), a short
-  delay step (~1 minute) is still smart headroom, because the card is
+  repeat the lookup. If you auto-post links to Bluesky (e.g. via Zapier), a
+  short delay step (~1 minute) is still smart headroom, because the card is
   generated when the link is first fetched and cached after that.
 - **A wrong handle can't hurt you.** At every session start the Worker
   compares the DID it actually logged in as against `ATPROTO_DID` and

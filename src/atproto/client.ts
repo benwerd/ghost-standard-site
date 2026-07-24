@@ -87,6 +87,21 @@ export async function createSession(env: Env): Promise<AtpAgent> {
 }
 
 /**
+ * True if a document record exists at `rkey`, checked via the PDS's public
+ * getRecord endpoint (no auth needed; reads are cheap and unmetered relative
+ * to writes). Used by the proxy so a derived link tag is only ever
+ * advertised for a record that actually exists.
+ */
+export async function documentRecordExists(env: Env, rkey: string): Promise<boolean> {
+  const url = new URL('/xrpc/com.atproto.repo.getRecord', env.ATPROTO_PDS_URL);
+  url.searchParams.set('repo', env.ATPROTO_DID);
+  url.searchParams.set('collection', DOCUMENT_COLLECTION);
+  url.searchParams.set('rkey', rkey);
+  const res = await fetch(url.toString());
+  return res.ok;
+}
+
+/**
  * Fetch an image URL and upload it as a blob, returning the BlobRef to embed
  * in a record. Returns undefined on any failure (missing image, non-2xx,
  * empty body, or over the 1MB lexicon cap), because a cover image is never
