@@ -110,9 +110,10 @@ export default {
    * is idempotent.
    *
    * Sync events share one PDS session per batch. Each message acks or
-   * retries independently: one failing post doesn't block the rest, and the
-   * queue's retry policy (5 attempts) plus the daily cron cover transient
-   * PDS outages.
+   * retries independently: one failing post doesn't block the rest. No
+   * event is ever allowed to die to the queue's max_retries: near the
+   * ceiling, a fresh copy is re-enqueued instead (idempotent, so safe),
+   * and the daily cron remains the backstop of last resort.
    */
   async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
     const postMessages: Message<QueueMessage>[] = [];
@@ -160,21 +161,45 @@ export default {
 
     if (postMessages.length === 0) return;
 
-    const publicationUri = await getPublicationUri(env.STATE);
-    if (!publicationUri) {
-      // Documents must reference the publication record; without it, park
-      // the events and let the retry pick them up after setup runs.
-      console.error('queue: publication record not set up; retrying later');
-      for (const message of postMessages) message.retry({ delaySeconds: 300 });
+    // A sync event must never be silently dropped: Ghost fires each webhook
+    // exactly once, so losing the queue message loses the post until the
+    // nightly cron notices. Near the queue's retry ceiling we re-enqueue a
+    // fresh copy (which resets the attempt counter) instead of letting
+    // max_retries discard the message, which is safe because processEvent is
+    // idempotent. Added after the 2026-07-24 incident, where a transient
+    // session failure burned all five retries and two confirmed-delivered
+    // webhooks vanished.
+    const retryOrResurrect = async (message: Message<QueueMessage>, delaySeconds: number) => {
+      if (message.attempts >= 4) {
+        console.error('post event near retry limit; re-enqueueing a fresh copy in 10min');
+        await env.EVENTS.send(message.body, { delaySeconds: 600 });
+        message.ack();
+      } else {
+        message.retry({ delaySeconds });
+      }
+    };
+
+    // Setup-phase failures (PDS login, publication not yet configured, KV
+    // trouble) affect every message equally; defer them all rather than
+    // throwing, which would spend one of each message's five queue retries.
+    let deps: SyncDeps;
+    try {
+      const publicationUri = await getPublicationUri(env.STATE);
+      if (!publicationUri) {
+        throw new Error('publication record not set up; POST /_atproto/setup first');
+      }
+      deps = {
+        writer: createPdsWriter(await createSession(env), env),
+        kv: env.STATE,
+        publicationUri,
+        ghostUrl: env.GHOST_URL,
+      };
+    } catch (err) {
+      console.error('queue setup failed; deferring post events', err);
+      for (const message of postMessages) await retryOrResurrect(message, 120);
       return;
     }
-    const agent = await createSession(env);
-    const deps: SyncDeps = {
-      writer: createPdsWriter(agent, env),
-      kv: env.STATE,
-      publicationUri,
-      ghostUrl: env.GHOST_URL,
-    };
+
     for (const message of postMessages) {
       try {
         const result = await processEvent(message.body as SyncEvent, deps);
@@ -182,7 +207,7 @@ export default {
         message.ack();
       } catch (err) {
         console.error('queue event failed', err);
-        message.retry({ delaySeconds: 60 });
+        await retryOrResurrect(message, 60);
       }
     }
   },

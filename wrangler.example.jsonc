@@ -7,6 +7,10 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  // Persistent invocation logs (viewable in the Cloudflare dashboard under
+  // Workers Logs). Without this, queue-consumer failures leave no trace,
+  // which turned an incident diagnosis into archaeology once already.
+  "observability": { "enabled": true },
   // Full-mode reconcile (archive backfill) makes ~8 subrequests per created
   // record plus ~100 Content API pages; the account default cap can be as
   // low as 1,000, which a 200-write backfill run exceeds.
