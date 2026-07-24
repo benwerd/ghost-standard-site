@@ -165,6 +165,16 @@ export async function putSessionData(kv: KVNamespace, session: import('@atproto/
   await kv.put(SESSION_KEY, JSON.stringify(session));
 }
 
+/**
+ * Drop the cached session. Called when a resume fails: atproto refresh
+ * tokens are single-use, so a cache left holding consumed tokens would
+ * make every subsequent invocation retry a dead session before falling
+ * back. Clearing it sends the next invocation straight to a fresh login.
+ */
+export async function deleteSessionData(kv: KVNamespace): Promise<void> {
+  await kv.delete(SESSION_KEY);
+}
+
 /** The publication record's AT-URI: what /.well-known serves and documents reference. Null before setup. */
 export async function getPublicationUri(kv: KVNamespace): Promise<string | null> {
   const entry = await kv.get<{ atUri: string }>(PUBLICATION_KEY, 'json');

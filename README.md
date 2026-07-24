@@ -489,7 +489,10 @@ Things you'd otherwise learn the hard way, collected:
 
 - **Everything fails open; the blog can never be degraded.** A missing KV
   entry means a page renders without link tags (not broken); a PDS outage
-  means the queue retries (5×) and the daily cron repairs whatever's left;
+  means the queue retries, and retries never run out: near the queue's
+  retry ceiling the consumer re-enqueues a fresh copy of the event instead
+  of letting it be discarded (idempotency makes this safe), with the daily
+  cron as the backstop of last resort;
   any error during tag injection passes the original page through
   untouched.
 - **Edits are debounced.** Ghost fires its "edited" webhook on *every* save

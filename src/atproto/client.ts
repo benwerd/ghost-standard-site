@@ -20,7 +20,7 @@
 import { AtpAgent } from '@atproto/api';
 import type { Env } from '../env';
 import type { PdsWriter } from '../sync';
-import { getSessionData, putSessionData } from '../state/kv';
+import { getSessionData, putSessionData, deleteSessionData } from '../state/kv';
 
 /** Collection NSID for per-post document records. */
 export const DOCUMENT_COLLECTION = 'site.standard.document';
@@ -76,7 +76,13 @@ export async function createSession(env: Env): Promise<AtpAgent> {
       // Don't swallow the safety check: a DID mismatch means misconfiguration,
       // not a stale token, and a fresh login would only "fix" it silently.
       if (err instanceof Error && /refusing to write/.test(err.message)) throw err;
-      // otherwise: expired/invalid cache, so fall through to a full login
+      // Expired/invalid cache: clear it BEFORE the login attempt. atproto
+      // refresh tokens are single-use, so a cache holding consumed tokens
+      // would otherwise poison every subsequent invocation too. And if the
+      // login below also fails transiently, the poison would persist across
+      // the queue's retries (this is the suspected mechanism behind the
+      // 2026-07-24 dropped-webhook incident).
+      await deleteSessionData(env.STATE).catch(() => {});
     }
   }
 

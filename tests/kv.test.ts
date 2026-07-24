@@ -73,6 +73,13 @@ describe('session cache', () => {
     await putSessionData(env.STATE, sess as never);
     expect((await getSessionData(env.STATE))?.accessJwt).toBe('aaa');
   });
+  it('deletes a poisoned session so the next invocation logs in fresh', async () => {
+    const { getSessionData, putSessionData, deleteSessionData } = await import('../src/state/kv');
+    const sess = { did: 'did:plc:x', handle: 'x.test', accessJwt: 'stale', refreshJwt: 'used', active: true };
+    await putSessionData(env.STATE, sess as never);
+    await deleteSessionData(env.STATE);
+    expect(await getSessionData(env.STATE)).toBeNull();
+  });
 });
 
 describe('reconcile report', () => {
