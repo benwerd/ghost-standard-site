@@ -45,8 +45,7 @@ this README assumes:
 Put together: this Worker writes one `site.standard.publication` record
 ("this is my blog") plus one `site.standard.document` record per post
 ("here's an article on it") into **your own repo, under your own DID**.
-Your writing becomes part of your identity on the network, not a copy
-held by some third-party bridge account.
+Your writing becomes part of your identity on the network.
 
 One more idea completes the picture: **verification**. Anyone could
 write a record *claiming* to be yourdomain.com, so apps check both
