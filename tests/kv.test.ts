@@ -56,6 +56,9 @@ describe('path entries (derive-on-miss support)', () => {
     const neg = await getPathEntry(env.STATE, '/about');
     expect(neg).not.toBeNull();
     expect(neg?.atUri).toBeNull();
+    // Negatives are timestamped so the proxy can tell young (soft, re-check)
+    // verdicts from hardened ones.
+    expect(neg?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
   it('a later real mapping overwrites a cached negative', async () => {
     const { getPathEntry, putPathNegative } = await import('../src/state/kv');

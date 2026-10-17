@@ -555,7 +555,13 @@ Things you'd otherwise learn the hard way, collected:
   Confirmed answers are cached; "record not written yet" retries on the
   next view. A new post's page carries correct tags on its very first view,
   seconds after publish; non-post pages get a cached negative so they don't
-  repeat the lookup. If you auto-post links to Bluesky (e.g. via Zapier), a
+  repeat the lookup. Negatives stay *soft* for their first five minutes:
+  the proxy re-checks them on every view before trusting them, because a
+  page viewed in the first seconds after publish can race Ghost's own
+  Content API (which may not list the brand-new post yet) and cache a wrong
+  "not a post" verdict. A poisoned verdict heals on the next page view;
+  genuine non-post pages harden after five minutes and expire after ten.
+  If you auto-post links to Bluesky (e.g. via Zapier), a
   short delay step (~1 minute) is still smart headroom, because the card is
   generated when the link is first fetched and cached after that.
 - **A wrong handle can't hurt you.** At every session start the Worker

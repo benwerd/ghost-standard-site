@@ -80,6 +80,13 @@ export async function deletePostState(kv: KVNamespace, postId: string, path?: st
  */
 export interface PathEntry {
   atUri: string | null;
+  /**
+   * Negatives only: when the verdict was cached. Young negatives are soft
+   * (the proxy re-checks them; see shouldRecheckNegative in handlers/proxy),
+   * because "not a post" can be the publish race: a brand-new post's page
+   * viewed before Ghost's own Content API lists the post yet.
+   */
+  at?: string;
 }
 
 /**
@@ -97,11 +104,18 @@ export async function putPathUri(kv: KVNamespace, path: string, atUri: string): 
 }
 
 /**
- * Cache "this path is not a post" for an hour. Safe even if the path later
- * becomes a post: the sync engine's putPostState overwrites it immediately.
+ * Cache "this path is not a post" for ten minutes, timestamped. The verdict
+ * is soft while young: the proxy re-checks negatives fresher than its grace
+ * period, so a verdict poisoned by the publish race (page viewed seconds
+ * after publish, before Ghost's Content API lists the post) heals on the
+ * very next view instead of suppressing the tag until the TTL expires.
  */
 export async function putPathNegative(kv: KVNamespace, path: string): Promise<void> {
-  await kv.put(PATH_PREFIX + path, JSON.stringify({ atUri: null }), { expirationTtl: 3600 });
+  await kv.put(
+    PATH_PREFIX + path,
+    JSON.stringify({ atUri: null, at: new Date().toISOString() }),
+    { expirationTtl: 600 }
+  );
 }
 
 /**

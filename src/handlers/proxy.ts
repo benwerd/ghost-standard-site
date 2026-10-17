@@ -14,7 +14,11 @@
  * How a page is known to be a post, in two layers, fast path first:
  * 1. KV has a cached answer for the path (positive: the record's AT-URI;
  *    negative: "not a post", cached so non-post pages don't pay layer 2 on
- *    every view).
+ *    every view). Negatives are soft while young: a verdict fresher than
+ *    NEGATIVE_GRACE_MS is re-checked anyway, because "not a post" can be
+ *    the publish race (the page viewed seconds after publish, before
+ *    Ghost's Content API lists the brand-new post), and a wrong verdict
+ *    here would otherwise hide the tag until the negative's TTL expires.
  * 2. Derive-on-miss: for a never-seen path, ask the Ghost Content API for a
  *    post with that slug, then resolve its record URI in trust order:
  *    stored post state first (authoritative; survives date edits, which
@@ -37,7 +41,14 @@ import { deriveRkey } from '../atproto/tid';
 import { isSyndicatable } from '../ghost/classify';
 import { fetchPostBySlug } from '../ghost/content-api';
 import { documentRecordExists } from '../atproto/client';
-import { getPathEntry, putPathUri, putPathNegative, getPublicationUri, getPostState } from '../state/kv';
+import {
+  getPathEntry,
+  putPathUri,
+  putPathNegative,
+  getPublicationUri,
+  getPostState,
+  type PathEntry,
+} from '../state/kv';
 
 /**
  * Point the incoming request at the Ghost origin. In production on the
@@ -93,6 +104,30 @@ export function docUriForPost(
   return `at://${did}/site.standard.document/${deriveRkey(post)}`;
 }
 
+/**
+ * How long a cached "not a post" verdict stays soft. Within this window the
+ * proxy re-runs derive-on-miss on every view instead of trusting the
+ * negative, so a verdict cached during the publish race (Ghost's Content
+ * API can take a few seconds to list a brand-new post, and KV's eventual
+ * consistency can let that stale verdict overwrite the fresh mapping) heals
+ * on the next page view. Five minutes comfortably covers webhook delivery,
+ * the queue write, and KV propagation; the cost is one Content API lookup
+ * per view during a genuinely-non-post page's first five minutes.
+ */
+export const NEGATIVE_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * Whether a cached negative is young enough that the proxy should re-check
+ * it rather than trust it. Positives are never re-checked here, and a
+ * negative without a timestamp (written by a pre-grace deploy) is treated
+ * as hardened; those age out via their TTL.
+ */
+export function shouldRecheckNegative(entry: PathEntry, nowMs: number): boolean {
+  if (entry.atUri !== null || !entry.at) return false;
+  const age = nowMs - Date.parse(entry.at);
+  return age < NEGATIVE_GRACE_MS; // NaN (unparseable timestamp) fails this, i.e. hardened
+}
+
 /** Injectable lookups for resolveOnMiss, so tests can run it without a network. */
 export interface ResolveDeps {
   fetchPost: (env: Env, slug: string) => Promise<GhostPost | null>;
@@ -117,13 +152,20 @@ const liveResolveDeps: ResolveDeps = {
  *    entry, so the next view simply retries; once the record lands, the
  *    tag appears and is cached.
  *
- * Confirmed answers are cached (positive permanently, "not a post" for an
- * hour). Any failure returns null and caches nothing: fail open.
+ * Confirmed answers are cached (positive permanently, "not a post" for ten
+ * minutes, soft while young). Any failure returns null and caches nothing:
+ * fail open.
+ *
+ * `cacheNegative: false` is used when re-checking an existing young
+ * negative: a repeat failure then leaves the original verdict (and its
+ * clock) in place, so a genuinely-non-post page still hardens on schedule
+ * instead of staying soft forever under steady traffic.
  */
 export async function resolveOnMiss(
   path: string,
   env: Env,
-  deps: ResolveDeps = liveResolveDeps
+  deps: ResolveDeps = liveResolveDeps,
+  opts: { cacheNegative?: boolean } = {}
 ): Promise<string | null> {
   const slug = path.split('/').filter(Boolean).pop();
   if (!slug) return null; // the root path is never a post
@@ -131,7 +173,7 @@ export async function resolveOnMiss(
     const post = await deps.fetchPost(env, slug);
     const derivedUri = post ? docUriForPost(post, env.ATPROTO_DID, env.GHOST_URL, path) : null;
     if (!post || !derivedUri) {
-      await putPathNegative(env.STATE, path);
+      if (opts.cacheNegative !== false) await putPathNegative(env.STATE, path);
       return null;
     }
 
@@ -178,7 +220,16 @@ export async function handleProxy(request: Request, env: Env): Promise<Response>
       getPublicationUri(env.STATE),
     ]);
     pubUri = publication;
-    docUri = entry ? entry.atUri : await resolveOnMiss(path, env);
+    if (!entry) {
+      docUri = await resolveOnMiss(path, env);
+    } else if (entry.atUri) {
+      docUri = entry.atUri;
+    } else if (shouldRecheckNegative(entry, Date.now())) {
+      // A young "not a post" verdict may be the publish race; re-check, but
+      // leave the stored verdict alone on repeat failure so its clock (and
+      // eventual hardening) is preserved.
+      docUri = await resolveOnMiss(path, env, liveResolveDeps, { cacheNegative: false });
+    }
   } catch {
     return originResponse;
   }
