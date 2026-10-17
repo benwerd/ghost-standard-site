@@ -5,7 +5,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { handleWebhook } from '../src/handlers/webhook';
 import { handleWellKnown } from '../src/handlers/wellknown';
-import { buildOriginRequest, injectLinkTags, docUriForPost, resolveOnMiss } from '../src/handlers/proxy';
+import {
+  buildOriginRequest,
+  injectLinkTags,
+  docUriForPost,
+  resolveOnMiss,
+  shouldRecheckNegative,
+  NEGATIVE_GRACE_MS,
+} from '../src/handlers/proxy';
 import { setPublicationUri, getPathEntry, putPostState } from '../src/state/kv';
 import { deriveRkey } from '../src/atproto/tid';
 import fixture from './fixtures/post-published.json';
@@ -162,7 +169,7 @@ describe('resolveOnMiss (derive, then verify)', () => {
     });
     expect(uri).toBe(originalUri);
   });
-  it('caches a negative for paths that are not posts', async () => {
+  it('caches a timestamped negative for paths that are not posts', async () => {
     const uri = await resolveOnMiss('/about', testEnv(), {
       fetchPost: async () => null,
       recordExists: async () => true,
@@ -171,6 +178,49 @@ describe('resolveOnMiss (derive, then verify)', () => {
     const entry = await getPathEntry(env.STATE, '/about');
     expect(entry).not.toBeNull();
     expect(entry?.atUri).toBeNull();
+    expect(entry?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+  it('leaves the stored verdict alone on failure when cacheNegative is false (negative re-check)', async () => {
+    const uri = await resolveOnMiss(
+      '/about',
+      testEnv(),
+      { fetchPost: async () => null, recordExists: async () => true },
+      { cacheNegative: false }
+    );
+    expect(uri).toBeNull();
+    expect(await getPathEntry(env.STATE, '/about')).toBeNull(); // nothing written
+  });
+  it('a successful re-check overwrites a cached negative with the positive', async () => {
+    const { putPathNegative } = await import('../src/state/kv');
+    await putPathNegative(env.STATE, '/hello-atmosphere');
+    const uri = await resolveOnMiss(
+      '/hello-atmosphere',
+      testEnv(),
+      { fetchPost: async () => post, recordExists: async () => true },
+      { cacheNegative: false }
+    );
+    expect(uri).toBe(derived);
+    expect((await getPathEntry(env.STATE, '/hello-atmosphere'))?.atUri).toBe(derived);
+  });
+});
+
+describe('shouldRecheckNegative (soft negatives, the publish-race heal)', () => {
+  const now = Date.parse('2026-07-13T10:10:00.000Z');
+
+  it('re-checks a negative younger than the grace period', () => {
+    const at = new Date(now - NEGATIVE_GRACE_MS + 60_000).toISOString();
+    expect(shouldRecheckNegative({ atUri: null, at }, now)).toBe(true);
+  });
+  it('trusts a negative older than the grace period (hardened)', () => {
+    const at = new Date(now - NEGATIVE_GRACE_MS - 1).toISOString();
+    expect(shouldRecheckNegative({ atUri: null, at }, now)).toBe(false);
+  });
+  it('never re-checks positives', () => {
+    expect(shouldRecheckNegative({ atUri: 'at://did:plc:x/site.standard.document/3kizf2hc622ry', at: new Date(now).toISOString() }, now)).toBe(false);
+  });
+  it('treats legacy negatives (no timestamp) and garbage timestamps as hardened', () => {
+    expect(shouldRecheckNegative({ atUri: null }, now)).toBe(false);
+    expect(shouldRecheckNegative({ atUri: null, at: 'not-a-date' }, now)).toBe(false);
   });
 });
 
