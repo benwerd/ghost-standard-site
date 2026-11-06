@@ -13,6 +13,7 @@
  * - 400: signed but unparseable body
  * - 200: valid but intentionally ignored (pages, drafts, member events…)
  * - 202: event queued
+ * - 500: enqueue failed even after retries (rare; reconcile repairs it)
  */
 import type { Env } from '../env';
 import { verifyGhostSignature } from '../ghost/signature';
@@ -49,6 +50,25 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
   if (!event) return new Response('ignored', { status: 200 });
 
   const force = new URL(request.url).searchParams.get('force') === '1';
-  await env.EVENTS.send(event.kind === 'upsert' && force ? { ...event, force: true } : event);
-  return new Response('queued', { status: 202 });
+  const message = event.kind === 'upsert' && force ? { ...event, force: true } : event;
+
+  // A verified event must not be lost to a transient Queues hiccup: Ghost
+  // fires each webhook exactly once and treats any non-2xx as a permanent
+  // failure, so this send is the one moment where a delivered webhook can
+  // still vanish (the queue consumer's never-drop machinery only protects
+  // events after they're accepted). Retry locally before giving up; if all
+  // attempts fail, say so loudly in the logs and answer 500 honestly (the
+  // twice-daily reconcile remains the net for whatever Ghost won't resend).
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await env.EVENTS.send(message);
+      return new Response('queued', { status: 202 });
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
+  }
+  console.error('webhook enqueue failed after 3 attempts; Ghost will not retry; reconcile will repair', lastErr);
+  return new Response('enqueue failed', { status: 500 });
 }
