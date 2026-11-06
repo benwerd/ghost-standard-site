@@ -58,6 +58,52 @@ describe('handleWebhook', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].kind).toBe('upsert');
   });
+
+  it('retries a transient enqueue failure and still returns 202', async () => {
+    const sent: SyncEvent[] = [];
+    let calls = 0;
+    const flakyEnv = {
+      ...env,
+      GHOST_WEBHOOK_SECRET: SECRET,
+      EVENTS: {
+        send: async (m: SyncEvent) => {
+          if (++calls < 3) throw new Error('queue hiccup');
+          sent.push(m);
+        },
+      } as unknown as Queue<SyncEvent>,
+    } as Env;
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {
+      method: 'POST',
+      body,
+      headers: { 'x-ghost-signature': await signedHeader(body, SECRET, Date.now()) },
+    });
+    const res = await handleWebhook(request, flakyEnv);
+    expect(res.status).toBe(202);
+    expect(calls).toBe(3);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('returns 500 when every enqueue attempt fails (never a silent drop)', async () => {
+    let calls = 0;
+    const deadEnv = {
+      ...env,
+      GHOST_WEBHOOK_SECRET: SECRET,
+      EVENTS: {
+        send: async () => {
+          calls++;
+          throw new Error('queue down');
+        },
+      } as unknown as Queue<SyncEvent>,
+    } as Env;
+    const request = new Request('https://blog.example.org/_atproto/ghost-webhook', {
+      method: 'POST',
+      body,
+      headers: { 'x-ghost-signature': await signedHeader(body, SECRET, Date.now()) },
+    });
+    const res = await handleWebhook(request, deadEnv);
+    expect(res.status).toBe(500);
+    expect(calls).toBe(3);
+  });
   it('marks the event force when ?force=1 is set on a signed request', async () => {
     const sent: SyncEvent[] = [];
     const request = new Request('https://blog.example.org/_atproto/ghost-webhook?force=1', {
