@@ -78,11 +78,15 @@ hats:
   normal blog traffic to Ghost, slipping the verification `<link>` tags
   into post pages on the way through. Everything else about your pages
   passes through byte-for-byte untouched.
-- **Nightly janitor.** A daily cron compares Ghost against what's been
+- **Twice-daily janitor.** A cron compares Ghost against what's been
   synced and repairs any drift (posts updated in the last 3 days, plus
-  cleanup of records whose posts are gone). The full-archive backfill is a
-  separate command you run on purpose; the cron never does it behind your
-  back.
+  cleanup of records whose posts are gone). It runs twice a day: overnight
+  (06:17 UTC) and again just after the common morning scheduling window
+  (12:17 UTC), because Ghost's scheduler has been known to skip the
+  post.published webhook for scheduled posts, and a morning-scheduled post
+  shouldn't have to wait a full day for repair. The full-archive backfill
+  is a separate command you run on purpose; the cron never does it behind
+  your back.
 
 **Content policy:** records carry metadata plus your excerpt, never full
 post bodies. The canonical home of your writing is your blog; the records
@@ -312,7 +316,7 @@ running the archive backfill.
    Read **Write quotas** below before you run this. The backfill knows how
    to pace itself, but it's worth understanding what it's pacing against.
    (A plain `POST` without `?full=1` runs the windowed repair, same as the
-   daily cron, synchronously and returns its report directly.)
+   twice-daily cron, synchronously and returns its report directly.)
 
 ## Write quotas (please read before backfilling)
 
@@ -447,7 +451,7 @@ iterating; it regenerates the same record. Undo with
 1. `npm run deploy` (with the cron, if you'd disabled it)
 2. Setup step 8 (`scripts/create-webhooks.mjs`) so real publishes flow
 3. Setup step 9 (`/_atproto/reconcile?full=1&max=1000`, one request,
-   self-chaining) to backfill the archive. The daily cron only repairs the
+   self-chaining) to backfill the archive. The cron passes only repair the
    recent window, so the backfill is an explicit step, not something the
    cron does behind your back.
 
@@ -513,7 +517,7 @@ Things you'd otherwise learn the hard way, collected:
   through the network. Like deleting a Bluesky post, it's propagation,
   not instant erasure everywhere.
 - **The reconcile sweep has two modes, both cheap at any archive size.**
-  The daily cron runs *windowed* mode: it re-checks posts updated in the
+  The cron passes run *windowed* mode: they re-check posts updated in the
   last 3 days (catching any webhook Ghost dropped; Ghost fires webhooks
   once, best-effort, no retries) plus orphan deletion, comparing your full
   KV state against an ids-only listing of all public posts. *Full* mode
@@ -532,7 +536,7 @@ Things you'd otherwise learn the hard way, collected:
 - **Kill switch for a runaway or unwanted reconcile chain:**
   `npx wrangler queues purge ghost-standard-site-events`. The chain lives
   as a delayed queue message, so purging ends it immediately. Side effect:
-  any in-flight webhook events are dropped too; the daily cron repairs
+  any in-flight webhook events are dropped too; the next cron pass repairs
   those automatically (or run a plain reconcile POST sooner).
 - **The publication's rkey is a TID** (a timestamp-based id, the standard
   record-key format on the network), minted at first setup and reused on

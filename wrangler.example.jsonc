@@ -30,7 +30,13 @@
       }
     ]
   },
-  "triggers": { "crons": ["17 6 * * *"] }
+  // Two windowed-reconcile passes a day. The second exists because Ghost's
+  // scheduler has been observed to skip post.published webhooks for
+  // scheduled posts: a morning-scheduled post (e.g. 5am US Eastern, 09:00
+  // or 10:00 UTC) that loses its webhook would otherwise stay missing
+  // until the next night's pass. 12:17 UTC sweeps shortly after the usual
+  // scheduling window instead.
+  "triggers": { "crons": ["17 6 * * *", "17 12 * * *"] }
   // No identity, domain, or auth values are committed here. All runtime
   // configuration (ATPROTO_HANDLE, ATPROTO_DID, ATPROTO_PDS_URL, GHOST_URL,
   // PUBLICATION_NAME) and secrets (GHOST_WEBHOOK_SECRET, ATPROTO_APP_PASSWORD,

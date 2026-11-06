@@ -113,7 +113,7 @@ export default {
    * retries independently: one failing post doesn't block the rest. No
    * event is ever allowed to die to the queue's max_retries: near the
    * ceiling, a fresh copy is re-enqueued instead (idempotent, so safe),
-   * and the daily cron remains the backstop of last resort.
+   * and the twice-daily cron remains the backstop of last resort.
    */
   async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
     const postMessages: Message<QueueMessage>[] = [];
@@ -163,7 +163,7 @@ export default {
 
     // A sync event must never be silently dropped: Ghost fires each webhook
     // exactly once, so losing the queue message loses the post until the
-    // nightly cron notices. Near the queue's retry ceiling we re-enqueue a
+    // next cron pass notices. Near the queue's retry ceiling we re-enqueue a
     // fresh copy (which resets the attempt counter) instead of letting
     // max_retries discard the message, which is safe because processEvent is
     // idempotent. Added after the 2026-07-24 incident, where a transient
@@ -213,10 +213,10 @@ export default {
   },
 
   /**
-   * Daily cron: the windowed reconcile. Deliberately NOT the archive
+   * Cron (twice daily): the windowed reconcile. Deliberately NOT the archive
    * backfill; full sweeps only happen on explicit operator request. The
    * report is stored for GET /_atproto/reconcile; failures are logged and
-   * left for the next day's run (or a manual pass).
+   * left for the next pass (or a manual one).
    */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
